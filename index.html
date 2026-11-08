@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#eae7d6" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MoneyMate" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="description" content="Quản lý tài chính cá nhân và chi tiêu chung, riêng tư và hoạt động khi ngoại tuyến." />
+    <title>MoneyMate — Quản lý tài chính</title>
+    <script>
+      try {
+        const preference = localStorage.getItem('moneymate-theme')
+        const useDark = preference === 'dark' || (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (useDark) {
+          document.documentElement.dataset.theme = 'dark'
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#172820')
+        }
+      } catch {}
+    </script>
+    <style>
+      html,body,#root{min-height:100%;background:#eae7d6}
+      html[data-theme="dark"],html[data-theme="dark"] body,html[data-theme="dark"] #root{background:#172820}
+      #root .app-launch-screen{position:fixed;inset:0;display:grid;align-content:center;justify-items:center;gap:10px;padding:24px;background:#eae7d6;color:#23362f;font:400 15px system-ui,sans-serif;text-align:center}
+      html[data-theme="dark"] #root .app-launch-screen{background:#172820;color:#f3f1e7}
+      #root .app-launch-mark{position:relative;width:88px;height:88px;display:grid;place-items:center}
+      #root .app-launch-mark::before{content:"";position:absolute;inset:0;border:1px solid rgba(93,123,111,.2);border-top-color:#49675b;border-right-color:#a4c3a2;border-radius:50%;animation:launch-orbit 2.4s linear infinite}
+      #root .app-launch-mark img{width:64px;height:64px;border-radius:18px;box-shadow:0 10px 28px rgb(43 73 58 / 18%);animation:launch-float 2s ease-in-out infinite}
+      #root .app-launch-screen>span{font-size:20px;font-weight:700}
+      @keyframes launch-orbit{to{transform:rotate(360deg)}}
+      @keyframes launch-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.025)}}
+      @media(prefers-reduced-motion:reduce){#root .app-launch-mark::before,#root .app-launch-mark img{animation:none}}
+    </style>
+  </head>
+  <body><div id="root"><div class="app-launch-screen" role="status" aria-label="MoneyMate"><span class="app-launch-mark"><img src="/icon.svg" width="64" height="64" alt=""/></span><span>MoneyMate</span></div></div><script type="module" src="/src/main.tsx"></script></body>
+</html>
