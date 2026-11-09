@@ -7,6 +7,7 @@ import { fetchAllPages } from '../../shared/lib/pagination'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { Button, Dropdown, IconButton, Input } from '../../shared/ui/Controls'
 import { calculateSpendingTotal } from '../../shared/lib/spending'
+import { plannedTotal, plannedTotalByCategory, type PlannedExpense } from '../../shared/lib/plannedExpenses'
 
 type Budget = { id: string; category_id: string | null; period_start: string; limit_bigint: string }
 type Category = { id: string; name: string; kind: 'income' | 'expense' }
@@ -18,6 +19,7 @@ export function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [plannedExpenses, setPlannedExpenses] = useState<PlannedExpense[]>([])
   const [categoryId, setCategoryId] = useState('')
   const [limit, setLimit] = useState('')
   const [loading, setLoading] = useState(true)
@@ -29,12 +31,14 @@ export function BudgetsPage() {
     if (!supabase) { setLoading(false); return }
     const client = supabase
     setLoading(true); setError('')
-    const [{ data: userData, error: authError }, budgetResult, categoryResult] = await Promise.all([
+    const [{ data: userData, error: authError }, budgetResult, categoryResult, plannedResult] = await Promise.all([
       client.auth.getUser(),
       fetchAllPages((from, to) => client.from('budgets').select('id,category_id,period_start,limit_bigint')
         .eq('period_start', monthStart).order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
       fetchAllPages((from, to) => client.from('categories').select('id,name,kind').eq('kind', 'expense')
         .order('name').order('id').range(from, to)),
+      fetchAllPages((from, to) => client.from('planned_expenses').select('id,amount_bigint,expected_date,category_id,wallet_id,note,reminder_days,status,converted_transaction_id,version,created_at,updated_at')
+        .eq('status', 'planned').gte('expected_date', monthStart).lt('expected_date', `${Number(monthStart.slice(0, 4)) + (monthStart.slice(5, 7) === '12' ? 1 : 0)}-${monthStart.slice(5, 7) === '12' ? '01' : String(Number(monthStart.slice(5, 7)) + 1).padStart(2, '0')}-01`).order('expected_date').range(from, to)),
     ])
     const transactionRows: Transaction[] = []
     let transactionError = false
@@ -46,12 +50,13 @@ export function BudgetsPage() {
       transactionRows.push(...page)
       if (page.length < 1000) break
     }
-    if (authError || budgetResult.error || categoryResult.error || transactionError) setError('Không tải được ngân sách tháng này. Hãy kiểm tra kết nối và thử lại.')
+    if (authError || budgetResult.error || categoryResult.error || plannedResult.error || transactionError) setError('Không tải được ngân sách tháng này. Hãy kiểm tra kết nối và thử lại.')
     else {
       setUserId(userData.user?.id ?? '')
       setBudgets((budgetResult.data ?? []) as Budget[])
       setCategories((categoryResult.data ?? []) as Category[])
       setTransactions(transactionRows)
+      setPlannedExpenses((plannedResult.data ?? []) as PlannedExpense[])
     }
     setLoading(false)
   }, [])
@@ -73,6 +78,8 @@ export function BudgetsPage() {
     return result
   }, [transactions])
   const spentTotal = calculateSpendingTotal(transactions)
+  const forecastTotal = plannedTotal(plannedExpenses)
+  const forecastByCategory = plannedTotalByCategory(plannedExpenses)
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setSuccess('')
@@ -90,7 +97,9 @@ export function BudgetsPage() {
     const category = categories.find(item => item.id === budget.category_id)
     const spent = budget.category_id ? spentByCategory.get(budget.category_id) ?? 0n : spentTotal
     const limitAmount = BigInt(budget.limit_bigint)
-    return { ...budget, label: category?.name ?? 'Ngân sách chung', spent, limitAmount, ...getBudgetMetrics(spent, limitAmount) }
+    const planned = budget.category_id ? forecastByCategory.get(budget.category_id) ?? 0n : forecastTotal
+    const projected = spent + planned
+    return { ...budget, label: category?.name ?? 'Ngân sách chung', spent, planned, projected, limitAmount, ...getBudgetMetrics(projected, limitAmount) }
   })
 
   return <section className="budgets-page" aria-labelledby="budgets-title">
@@ -98,7 +107,7 @@ export function BudgetsPage() {
     <header className="content-heading budgets-heading"><div><p className="eyebrow">KẾ HOẠCH CHI TIÊU</p><h1 id="budgets-title">Ngân sách</h1><p className="subheading">Theo dõi chi tiêu so với hạn mức trong {monthLabel}.</p></div><div className="budget-month-badge"><Target size={16}/>{monthLabel}</div></header>
     {error && <div className="form-error" role="alert">{error}<Button onClick={() => void refresh()}>Thử lại</Button></div>}{success && <p className="budget-success" role="status">{success}</p>}
     <form className="budget-form" onSubmit={save}><div className="budget-form-intro"><span className="budget-form-kicker">THÁNG NÀY</span><h2>Đặt hạn mức</h2><p>Chọn một danh mục hoặc áp dụng cho tổng chi tiêu.</p></div><div className="budget-field"><label htmlFor="budget-category">Phạm vi ngân sách</label><Dropdown id="budget-category" value={categoryId} onChange={event => setCategoryId(event.target.value)}><option value="">Tổng chi tiêu</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</Dropdown></div><div className="budget-field"><label htmlFor="budget-limit">Hạn mức (₫)</label><Input id="budget-limit" inputMode="numeric" placeholder="Ví dụ: 5.000.000" value={limit} onChange={event => setLimit(normalizeVndInput(event.target.value))} required/></div><Button type="submit" variant="primary" className="mobile-plus-action" aria-label="Lưu hạn mức" title="Lưu hạn mức" disabled={busy || loading}>{busy ? <LoaderCircle size={18} className="spin" aria-hidden="true"/> : <><CirclePlus size={17} aria-hidden="true"/><span className="mobile-plus-label">Lưu hạn mức</span></>}</Button></form>
-    <div className="budget-overview-card"><div className="budget-overview-icon"><Gauge size={20}/></div><div><span>Đã chi trong tháng (gồm trả nợ)</span><strong>{formatVnd(spentTotal)}</strong></div><small>{transactions.length} khoản chi và trả nợ</small></div>
+    <div className="budget-overview-card"><div className="budget-overview-icon"><Gauge size={20}/></div><div><span>Đã chi / Dự kiến / Có thể chi</span><strong>{formatVnd(spentTotal)} / {formatVnd(forecastTotal)} / {formatVnd(spentTotal + forecastTotal)}</strong></div><small>{transactions.length} khoản thực tế · {plannedExpenses.length} khoản dự kiến</small></div>
     <div className="budget-list-heading budget-section-heading"><div><span className="budget-form-kicker">TỔNG QUAN DANH MỤC</span><h2>Hạn mức của tháng</h2><p>Cập nhật theo các khoản chi đã ghi sổ.</p></div><IconButton onClick={() => void refresh()} label="Làm mới ngân sách" disabled={loading}><RefreshCw size={17}/></IconButton></div>
     {loading ? null : budgetCards.length === 0 ? (
       <div className="wallet-empty budget-empty-state"><Target size={28}/><h2>Chưa đặt ngân sách</h2><p>Thêm hạn mức đầu tiên để biết mình đã sử dụng bao nhiêu ngân sách tháng này.</p></div>
@@ -106,11 +115,11 @@ export function BudgetsPage() {
       <ul className="budget-list">{budgetCards.map(budget => (
         <li className={`budget-card ${budget.state}`} key={budget.id}>
           <div className="budget-card-top">
-            <div className="budget-card-values"><span className="budget-scope">{budget.label}</span><strong>{formatVnd(budget.spent)} <small>/ {formatVnd(budget.limitAmount)}</small></strong></div>
+            <div className="budget-card-values"><span className="budget-scope">{budget.label}</span><strong>{formatVnd(budget.projected)} <small>/ {formatVnd(budget.limitAmount)}</small></strong><small>Đã chi {formatVnd(budget.spent)} · Dự kiến {formatVnd(budget.planned)}</small></div>
             <span className={`budget-state-label ${budget.state}`}>{budget.state === 'over' ? 'Đã vượt hạn mức' : budget.state === 'near' ? 'Sắp chạm hạn mức' : 'Trong hạn mức'}</span>
           </div>
-          <div className="budget-progress" role="progressbar" aria-label={`Đã dùng ${budget.label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, budget.percent)}><span style={{ width: `${Math.min(100, budget.percent)}%` }} /></div>
-          <div className="budget-card-foot"><span>{budget.percent}% đã dùng</span><span className={budget.overage > 0n ? 'budget-overage' : ''}>{budget.overage > 0n ? `Vượt ${formatVnd(budget.overage)}` : `Còn ${formatVnd(budget.remaining)}`}</span></div>
+          <div className="budget-progress" role="progressbar" aria-label={`Dự phóng sử dụng ${budget.label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, budget.percent)}><span style={{ width: `${Math.min(100, budget.percent)}%` }} /></div>
+          <div className="budget-card-foot"><span>{budget.percent}% nếu chi đúng kế hoạch</span><span className={budget.overage > 0n ? 'budget-overage' : ''}>{budget.overage > 0n ? `Có thể vượt ${formatVnd(budget.overage)}` : `Dự kiến còn ${formatVnd(budget.remaining)}`}</span></div>
         </li>
       ))}</ul>
     )}

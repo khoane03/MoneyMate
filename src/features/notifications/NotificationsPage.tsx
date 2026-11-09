@@ -1,5 +1,5 @@
 import { Button as CommonButton } from '../../shared/ui/Controls'
-import { Bell, CheckCheck, CircleAlert, HandCoins, Info, RefreshCw } from 'lucide-react'
+import { Bell, CalendarClock, CheckCheck, CircleAlert, HandCoins, Info, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useNotifications } from './notificationContext'
 import { formatDateTime } from '../../shared/lib/dateFormat'
@@ -30,8 +30,8 @@ export function NotificationsPage() {
         <ul className="notification-list" aria-label={`${notifications.length} thông báo gần đây`}>
           {notifications.map(item => (
             <li key={item.id} className={item.read_at ? 'notification-item' : 'notification-item unread'}>
-              <Link to={item.entity_type === 'admin_notice' ? '/' : '/sharing'} onClick={() => { if (!item.read_at) void markRead(item.id) }}>
-                <span className="notification-icon">{item.entity_type === 'admin_notice' ? <Info size={19} aria-hidden="true"/> : <HandCoins size={19} aria-hidden="true"/>}</span>
+              <Link to={item.entity_type === 'admin_notice' ? '/' : item.entity_type === 'planned_expense' ? '/planned-expenses' : '/sharing'} onClick={() => { if (!item.read_at) void markRead(item.id) }}>
+                <span className="notification-icon">{item.entity_type === 'admin_notice' ? <Info size={19} aria-hidden="true"/> : item.entity_type === 'planned_expense' ? <CalendarClock size={19} aria-hidden="true"/> : <HandCoins size={19} aria-hidden="true"/>}</span>
                 <span className="notification-copy"><strong>{item.title}</strong><span>{item.body}</span><time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time></span>
                 {!item.read_at && <span className="notification-unread-dot"><span className="visually-hidden">Chưa đọc</span></span>}
               </Link>

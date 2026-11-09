@@ -117,7 +117,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const userId = data.user.id
       const reconcileReminders = () => {
         void (async () => {
-          try { await client.rpc('process_due_direct_debt_reminders') } catch { /* Older schemas may not have this optional RPC yet. */ }
+          try {
+            await Promise.all([
+              client.rpc('process_due_direct_debt_reminders'),
+              client.rpc('process_due_planned_expense_reminders'),
+            ])
+          } catch { /* Older schemas may not have these optional RPCs yet. */ }
           if (!disposed) void refresh()
         })()
       }

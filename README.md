@@ -7,7 +7,7 @@ MoneyMate là ứng dụng quản lý tài chính cá nhân và chi tiêu nhóm,
 - **Giao diện:** React 19, TypeScript strict, Vite, React Router, Tailwind CSS, Lucide.
 - **Biểu mẫu và trạng thái:** React Hook Form, Zod và Zustand.
 - **Dữ liệu trên thiết bị:** Dexie và IndexedDB; service worker hỗ trợ trải nghiệm PWA.
-- **Backend:** Supabase Auth, PostgreSQL, Row Level Security (RLS), Storage và Edge Functions.
+- **Backend:** Supabase Auth, PostgreSQL, Row Level Security (RLS) và Edge Functions; Cloudinary lưu ảnh riêng tư.
 - **Hóa đơn và báo cáo:** Tesseract.js cho OCR tiếng Việt chạy trên thiết bị; Recharts cho biểu đồ.
 
 ## Tính năng
@@ -72,4 +72,8 @@ Vercel cung cấp HTTPS cho domain của deployment. Với domain riêng, thêm 
 
 ## Cấu hình ảnh và camera
 
-Ảnh hóa đơn dùng Supabase Storage riêng tư. OCR chạy trong trình duyệt; lần đầu sử dụng cần tải engine và dữ liệu ngôn ngữ. Camera yêu cầu HTTPS hoặc `localhost`. Khi mở ứng dụng từ điện thoại trong mạng nội bộ, hãy phục vụ ứng dụng qua HTTPS với chứng chỉ được thiết bị tin cậy.
+Ảnh hóa đơn, minh chứng, check-in và avatar dùng Cloudinary với delivery type `authenticated`. Trình duyệt chỉ nhận chữ ký upload ngắn hạn; API secret nằm trong Supabase Edge Function. Supabase chỉ lưu Cloudinary `public_id`, checksum và metadata phân quyền. Link xem ảnh có thời hạn và chỉ được cấp sau khi kiểm tra chủ sở hữu hoặc thành viên nhóm. Cấu hình server cần `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` và `MEDIA_ALLOWED_ORIGINS`.
+
+Quy trình cấu hình và thứ tự triển khai production nằm trong [`docs/CLOUDINARY_SETUP.md`](docs/CLOUDINARY_SETUP.md).
+
+OCR chạy trong trình duyệt; lần đầu sử dụng cần tải engine và dữ liệu ngôn ngữ. Camera yêu cầu HTTPS hoặc `localhost`. Khi mở ứng dụng từ điện thoại trong mạng nội bộ, hãy phục vụ ứng dụng qua HTTPS với chứng chỉ được thiết bị tin cậy.

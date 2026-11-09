@@ -11,6 +11,7 @@ import {
   EyeOff,
   HandCoins,
   Landmark,
+  CalendarClock,
   RefreshCw,
   ScanLine,
   ShieldCheck,
@@ -49,6 +50,7 @@ type DashboardData = {
   wallets: Wallet[]
   transactions: Transaction[]
   categories: Category[]
+  planned: { id: string; amount_bigint: string; expected_date: string; status: string }[]
 }
 
 const currencyKinds = new Set(['income', 'expense', 'loan_principal_payment'])
@@ -76,6 +78,7 @@ export function DashboardPage() {
     wallets: [],
     transactions: [],
     categories: [],
+    planned: [],
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -126,7 +129,7 @@ export function DashboardPage() {
         if (rows.length < 1000) return { data: all, error: null }
       }
     }
-    const [wallets, transactions, categories] = await Promise.all([
+    const [wallets, transactions, categories, planned] = await Promise.all([
       fetchAllPages((from, to) => client
         .from('wallet_balances')
         .select('id,kind,display_name,current_balance_bigint,status')
@@ -136,14 +139,16 @@ export function DashboardPage() {
       readTransactions(),
       fetchAllPages((from, to) => client.from('categories').select('id,name,kind')
         .order('kind').order('name').order('id').range(from, to)),
+      client.from('planned_expenses').select('id,amount_bigint,expected_date,status').eq('status', 'planned').gte('expected_date', today()).order('expected_date').limit(50),
     ])
-    if (wallets.error || transactions.error || categories.error) {
+    if (wallets.error || transactions.error || categories.error || planned.error) {
       setError('Chưa tải được tổng quan. Kiểm tra mạng rồi thử tải lại.')
     } else {
       setData({
         wallets: (wallets.data ?? []) as Wallet[],
         transactions: (transactions.data ?? []) as Transaction[],
         categories: (categories.data ?? []) as Category[],
+        planned: (planned.data ?? []) as DashboardData['planned'],
       })
     }
     setLoading(false)
@@ -236,7 +241,12 @@ export function DashboardPage() {
     0n,
   )
   const hasFinancialData =
-    data.wallets.length > 0 || data.transactions.length > 0
+    data.wallets.length > 0 || data.transactions.length > 0 || data.planned.length > 0
+  const upcomingPlanned = data.planned.filter(item => {
+    const difference = (new Date(`${item.expected_date}T12:00:00+07:00`).getTime() - new Date(`${today()}T12:00:00+07:00`).getTime()) / 86_400_000
+    return difference >= 0 && difference <= 30
+  })
+  const upcomingPlannedTotal = upcomingPlanned.reduce((sum, item) => sum + BigInt(item.amount_bigint), 0n)
 
   return (
     <section className="dashboard" aria-labelledby="dashboard-title">
@@ -402,6 +412,10 @@ export function DashboardPage() {
               </div>
               <span>Vay &amp; Trả nợ</span>
             </Link>
+            <Link to="/planned-expenses" className="quick-action-item">
+              <div className="quick-action-circle transfer"><CalendarClock size={20} /></div>
+              <span>Dự kiến</span>
+            </Link>
           </section>
 
           {/* Month Flow Metrics */}
@@ -424,6 +438,12 @@ export function DashboardPage() {
                     : '•••••••• ₫'}
               </strong>
               <small>{currentMonthLabel}</small>
+            </Surface>
+
+            <Surface as="article" className="metric-card">
+              <div className="metric-label"><span className="metric-icon wallet-mini"><CalendarClock size={16} /></span><span>Dự kiến 30 ngày</span></div>
+              <strong>{loading ? '—' : showBalance ? formatVnd(upcomingPlannedTotal) : '•••••••• ₫'}</strong>
+              <small><Link to="/planned-expenses">{upcomingPlanned.length} khoản sắp tới</Link></small>
             </Surface>
 
             <Surface as="article" className="metric-card">

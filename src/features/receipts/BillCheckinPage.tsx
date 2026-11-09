@@ -10,6 +10,7 @@ import { scanReceiptImage, type ReceiptOcrWorker, type ReceiptScanProgress } fro
 import { Button, Dropdown, Input } from '../../shared/ui/Controls'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
+import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
 
 type Wallet = { id: string; display_name: string }
 type Category = { id: string; name: string }
@@ -81,8 +82,7 @@ export function BillCheckinPage() {
       const tx = transactions.get(row.transaction_id)
       let imageUrl: string | null = null
       if (row.storage_path) {
-        const { data } = await client.storage.from('receipt-files').createSignedUrl(row.storage_path, 1800)
-        imageUrl = data?.signedUrl ?? null
+        imageUrl = await getPrivateImageUrl(row.storage_path, 1800).catch(() => null)
       }
       return { ...row, amount_bigint: tx?.amount_bigint ?? '0', accounting_date: tx?.accounting_date ?? row.created_at.slice(0, 10), image_url: imageUrl }
     }))
@@ -127,8 +127,7 @@ export function BillCheckinPage() {
       const rows = (data ?? []) as Array<Omit<Checkin, 'image_url'>>
       const hydrated = await Promise.all(rows.map(async row => {
         if (!row.storage_path) return { ...row, image_url: null }
-        const { data: signed } = await client.storage.from('receipt-files').createSignedUrl(row.storage_path, 1800)
-        return { ...row, image_url: signed?.signedUrl ?? null }
+        return { ...row, image_url: await getPrivateImageUrl(row.storage_path, 1800).catch(() => null) }
       }))
       if (active) { setSharedFeed(hydrated); setFeedLoading(false) }
     }
@@ -243,10 +242,7 @@ export function BillCheckinPage() {
     let storagePath: string | null = null
     try {
       if (file) {
-        const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-        storagePath = `${userId}/${checkinId}.${extension}`
-        const { error: uploadError } = await supabase.storage.from('receipt-files').upload(storagePath, file, { contentType: file.type, upsert: false })
-        if (uploadError) throw new Error('Không tải được ảnh vào kho riêng tư. Kiểm tra kết nối và thử lại.')
+        storagePath = await uploadPrivateImage(file, 'bill-checkin')
       }
       const occurredAt = new Date(`${date}T12:00:00+07:00`).toISOString()
       const rpcName = shareConnectionId ? 'create_shared_personal_bill_checkin' : 'create_personal_bill_checkin'
@@ -256,14 +252,14 @@ export function BillCheckinPage() {
         p_caption: caption.trim(), p_storage_path: storagePath, p_idempotency_key: idempotencyKey,
         ...(shareConnectionId ? { p_connection_id: shareConnectionId } : {}),
       })
-      if (saveError) throw new Error(saveError.message.includes('does not exist') ? 'Cơ sở dữ liệu chưa có migration Check-in bill. Hãy áp dụng migration 202611080007.' : 'Không lưu được khoản chi. Kiểm tra ví, danh mục và thử lại.')
+      if (saveError) throw new Error(saveError.message.includes('does not exist') ? 'Cơ sở dữ liệu chưa có migration Check-in bill. Hãy áp dụng migration 202611080007.' : saveError.code === '23514' ? 'Cơ sở dữ liệu chưa nhận dạng định dạng ảnh Cloudinary. Hãy áp dụng migration 202611090003.' : 'Không lưu được khoản chi. Kiểm tra ví, danh mục và thử lại.')
       setNotice(shareConnectionId ? 'Đã lưu khoản chi và chia sẻ Check-in với nhóm.' : 'Đã lưu check-in thành một khoản chi trong sổ của bạn.')
       if (shareConnectionId) { setFeedConnectionId(shareConnectionId); setFeedRefreshKey(value => value + 1) }
       setFile(null); setCaption(''); setAmount(''); setDate(todayHcm()); setCategoryId(''); setShareConnectionId(''); setProgress({ percent: 0, message: '' })
       rotateRequest()
       await refresh()
     } catch (cause) {
-      if (storagePath && supabase) await supabase.storage.from('receipt-files').remove([storagePath])
+      if (storagePath) await deletePrivateImage(storagePath).catch(() => undefined)
       setError(cause instanceof Error ? cause.message : 'Không lưu được bill. Thử lại.')
     } finally { setSaving(false) }
   }

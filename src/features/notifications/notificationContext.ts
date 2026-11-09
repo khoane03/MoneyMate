@@ -4,7 +4,7 @@ export type PartnerNotification = {
   id: string
   connection_id: string | null
   event_type: string
-  entity_type: 'shared_expense' | 'settlement' | 'admin_notice' | 'direct_debt' | 'payment_request'
+  entity_type: 'shared_expense' | 'settlement' | 'admin_notice' | 'direct_debt' | 'payment_request' | 'planned_expense'
   entity_id: string
   title: string
   body: string

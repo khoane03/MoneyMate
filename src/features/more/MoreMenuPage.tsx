@@ -1,10 +1,12 @@
+import { useEffect, useState } from 'react'
 import {
-  BarChart3, Bell, Camera, FolderTree, HandCoins, Landmark, ScanLine, Settings2,
+  BarChart3, Bell, CalendarClock, Camera, FolderTree, HandCoins, Landmark, ScanLine, Settings2,
   ShieldCheck, Target, User, WalletCards,
 } from 'lucide-react'
 import { useNotifications } from '../notifications/notificationContext'
 import { profileInitial, useAccountProfile } from '../auth/accountProfile'
 import { MenuLink } from '../../shared/ui/Controls'
+import { hasAdminAccess } from '../../shared/lib/adminAccess'
 
 const menuGroups = [
   {
@@ -13,6 +15,7 @@ const menuGroups = [
       { to: '/wallets', tone: 'wallet', icon: WalletCards, title: 'Ví của tôi', description: 'Quản lý tiền mặt, thẻ ngân hàng, ví điện tử' },
       { to: '/loans', tone: 'loan', icon: Landmark, title: 'Vay & Trả nợ', description: 'Xem đã vay, đã trả và còn nợ theo từng khoản' },
       { to: '/budgets', tone: 'budget', icon: Target, title: 'Hạn mức & Ngân sách', description: 'Kiểm soát chi tiêu tháng theo danh mục' },
+      { to: '/planned-expenses', tone: 'budget', icon: CalendarClock, title: 'Khoản chi dự kiến', description: 'Lên kế hoạch khoản sắp chi và xác nhận khi đã chi' },
       { to: '/categories', tone: 'category', icon: FolderTree, title: 'Danh mục chi tiêu', description: 'Tùy chỉnh nhóm thu nhập và khoản chi' },
     ],
   },
@@ -38,6 +41,12 @@ const menuGroups = [
 export function MoreMenuPage() {
   const { unreadCount } = useNotifications()
   const { profile } = useAccountProfile()
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => { let active = true; void hasAdminAccess().then(value => { if (active) setIsAdmin(value) }); return () => { active = false } }, [])
+  const visibleGroups = menuGroups.map(group => ({
+    ...group,
+    items: group.items.filter(item => item.to !== '/admin' || isAdmin),
+  })).filter(group => group.items.length > 0)
   return (
     <div className="more-menu-page" aria-labelledby="more-menu-title">
       <header className="mobile-only-header">
@@ -53,7 +62,7 @@ export function MoreMenuPage() {
           <span className="menu-profile-badge"><span className="live-dot" /> Thông tin cá nhân chỉ bạn xem</span>
         </div>
       </section>
-      {menuGroups.map(group => (
+      {visibleGroups.map(group => (
         <section className="menu-group" key={group.title}>
           <h2 className="menu-group-title">{group.title}</h2>
           <nav className="menu-list" aria-label={group.title}>

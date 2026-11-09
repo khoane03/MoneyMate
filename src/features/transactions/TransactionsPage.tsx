@@ -13,6 +13,7 @@ import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { ReceiptAutofill } from '../../shared/ui/ReceiptAutofill'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
+import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
 
 type Wallet = { id: string; display_name: string }
 type Category = { id: string; name: string; kind: 'income' | 'expense' }
@@ -159,9 +160,8 @@ export function TransactionsPage({ composerOnly = false, onClose, onSaved }: { c
       if (transactionRows.length) {
         const evidence = await client.from('transaction_evidence').select('transaction_id,storage_path').in('transaction_id', transactionRows.map(row => row.id))
         if (!evidence.error) await Promise.all((evidence.data ?? []).map(async item => {
-          const { data: signed } = await client.storage.from('receipt-files').createSignedUrl(item.storage_path, 1800)
           const row = transactionRows.find(entry => entry.id === item.transaction_id)
-          if (row) row.evidence_url = signed?.signedUrl ?? null
+          if (row) row.evidence_url = await getPrivateImageUrl(item.storage_path, 1800).catch(() => null)
         }))
       }
       setRows(transactionRows)
@@ -194,9 +194,8 @@ export function TransactionsPage({ composerOnly = false, onClose, onSaved }: { c
       if (page.length) {
         const evidence = await client.from('transaction_evidence').select('transaction_id,storage_path').in('transaction_id', page.map(row => row.id))
         if (!evidence.error) await Promise.all((evidence.data ?? []).map(async item => {
-          const { data: signed } = await client.storage.from('receipt-files').createSignedUrl(item.storage_path, 1800)
           const row = page.find(entry => entry.id === item.transaction_id)
-          if (row) row.evidence_url = signed?.signedUrl ?? null
+          if (row) row.evidence_url = await getPrivateImageUrl(item.storage_path, 1800).catch(() => null)
         }))
       }
       setRows(current => [...current, ...page])
@@ -329,14 +328,15 @@ export function TransactionsPage({ composerOnly = false, onClose, onSaved }: { c
       if (evidenceImage && result?.id) {
         const userId = (await supabase.auth.getUser()).data.user?.id
         if (userId) {
-          const ext = evidenceImage.type === 'image/png' ? 'png' : evidenceImage.type === 'image/webp' ? 'webp' : 'jpg'
-          const path = `${userId}/${idempotencyKey}.${ext}`
-          const { error: uploadError } = await supabase.storage.from('receipt-files').upload(path, evidenceImage, { contentType: evidenceImage.type, upsert: false })
-          const evidenceResult = uploadError ? { error: uploadError } : result.status === 'pending'
-            ? await supabase.from('shared_loan_payment_evidence').insert({ shared_payment_id: result.id, owner_id: userId, storage_path: path })
-            : await supabase.from('transaction_evidence').insert({ transaction_id: result.id, owner_id: userId, storage_path: path })
-          if (evidenceResult.error) {
-            if (!uploadError) await supabase.storage.from('receipt-files').remove([path])
+          let path: string | null = null
+          try {
+            path = await uploadPrivateImage(evidenceImage, result.status === 'pending' ? 'loan-evidence' : 'transaction-evidence')
+            const evidenceResult = result.status === 'pending'
+              ? await supabase.from('shared_loan_payment_evidence').insert({ shared_payment_id: result.id, owner_id: userId, storage_path: path })
+              : await supabase.from('transaction_evidence').insert({ transaction_id: result.id, owner_id: userId, storage_path: path })
+            if (evidenceResult.error) throw evidenceResult.error
+          } catch {
+            if (path) await deletePrivateImage(path).catch(() => undefined)
             savedMessage = 'Đã lưu giao dịch, nhưng ảnh minh chứng chưa tải lên được. Không tạo lại giao dịch để tránh ghi trùng khoản chi.'
           }
         }

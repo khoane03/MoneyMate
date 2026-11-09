@@ -11,6 +11,7 @@ import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { useConfirm } from '../../shared/ui/useConfirm'
 import { ReceiptAutofill } from '../../shared/ui/ReceiptAutofill'
+import { getPrivateImageUrl } from '../../shared/lib/privateMedia'
 
 type Connection = { id: string; member_a_id: string; member_b_id: string; created_at: string }
 type ConnectionMember = { connection_id: string; user_id: string; display_name: string; avatar_storage_path?: string | null; avatar_url?: string | null; role: 'owner'|'member'; joined_at: string }
@@ -149,8 +150,7 @@ export function SharingPage() {
       const members = (memberResult.data ?? []) as ConnectionMember[]
       await Promise.all(members.map(async member => {
         if (!member.avatar_storage_path) return
-        const { data: signed } = await client.storage.from('profile-avatars').createSignedUrl(member.avatar_storage_path, 3600)
-        member.avatar_url = signed?.signedUrl ?? null
+        member.avatar_url = await getPrivateImageUrl(member.avatar_storage_path, 3600).catch(() => null)
       }))
       setData({ connections, members, balances: (balanceResult.data ?? []) as Balance[], expenses, settlements: (settlementResult.data ?? []) as Settlement[], paymentRequests: (paymentRequestResult.data ?? []) as PaymentRequest[], wallets: (walletResult.data ?? []) as Wallet[], categories: (categoryResult.data ?? []) as Category[], items: (itemResult.data ?? []) as ExpenseItem[], allocations: (allocationResult.data ?? []) as Allocation[], approvals: (approvalResult.data ?? []) as ExpenseApproval[] })
       setHasMoreActivity(expenses.length === SHARED_ACTIVITY_PAGE_SIZE || (settlementResult.data ?? []).length === SHARED_ACTIVITY_PAGE_SIZE)

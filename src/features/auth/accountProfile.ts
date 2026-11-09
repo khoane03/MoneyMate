@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../shared/lib/supabase'
+import { getPrivateImageUrl } from '../../shared/lib/privateMedia'
 
 export type AccountProfile = { userId: string; displayName: string; avatarPath: string | null; avatarUrl: string | null }
 
@@ -19,8 +20,7 @@ export function useAccountProfile() {
       if (profileError) throw profileError
       let avatarUrl: string | null = null
       if (data?.avatar_storage_path) {
-        const { data: signed, error: signedError } = await supabase.storage.from('profile-avatars').createSignedUrl(data.avatar_storage_path, 3600)
-        if (!signedError) avatarUrl = signed.signedUrl
+        avatarUrl = await getPrivateImageUrl(data.avatar_storage_path, 3600).catch(() => null)
       }
       setProfile({ userId: auth.user.id, displayName: data?.display_name ?? '', avatarPath: data?.avatar_storage_path ?? null, avatarUrl })
     } catch {

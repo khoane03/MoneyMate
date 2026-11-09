@@ -1,5 +1,5 @@
-import { Link, NavLink, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom'
-import { lazy, Suspense, useState } from 'react'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, type Location } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import {
   BarChart3,
   HandCoins,
@@ -15,6 +15,7 @@ import { GlassSurface } from '../shared/ui/GlassSurface'
 import { PageContainer } from '../shared/ui/PageContainer'
 import { ErrorScreen } from '../shared/ui/ErrorScreen'
 import { UsageTracker } from '../shared/lib/UsageTracker'
+import { hasAdminAccess } from '../shared/lib/adminAccess'
 
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage').then(module => ({ default: module.DashboardPage })))
 const TransactionsPage = lazy(() => import('../features/transactions/TransactionsPage').then(module => ({ default: module.TransactionsPage })))
@@ -26,6 +27,7 @@ const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then(mo
 const WalletsPage = lazy(() => import('../features/wallets/WalletsPage').then(module => ({ default: module.WalletsPage })))
 const LoansPage = lazy(() => import('../features/loans/LoansPage').then(module => ({ default: module.LoansPage })))
 const BudgetsPage = lazy(() => import('../features/budgets/BudgetsPage').then(module => ({ default: module.BudgetsPage })))
+const PlannedExpensesPage = lazy(() => import('../features/planned/PlannedExpensesPage').then(module => ({ default: module.PlannedExpensesPage })))
 const CategoriesPage = lazy(() => import('../features/categories/CategoriesPage').then(module => ({ default: module.CategoriesPage })))
 const MoreMenuPage = lazy(() => import('../features/more/MoreMenuPage').then(module => ({ default: module.MoreMenuPage })))
 const SettingsPage = lazy(() => import('../features/auth/SettingsPage').then(module => ({ default: module.SettingsPage })))
@@ -47,6 +49,7 @@ const titleMap: Record<string, string> = {
   '/wallets': 'Ví của tôi',
   '/loans': 'Vay & Trả nợ',
   '/budgets': 'Ngân sách tháng',
+  '/planned-expenses': 'Khoản chi dự kiến',
   '/categories': 'Danh mục chi tiêu',
   '/receipts': 'Hóa đơn & OCR',
   '/bill-checkin': 'Check-in chi tiêu',
@@ -60,6 +63,8 @@ export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const [saveNotice, setSaveNotice] = useState('')
+  const [adminAccess, setAdminAccess] = useState<'checking' | 'allowed' | 'denied'>('checking')
+  useEffect(() => { let active = true; void hasAdminAccess().then(value => { if (active) setAdminAccess(value ? 'allowed' : 'denied') }); return () => { active = false } }, [])
   const background = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation
   const composing = location.pathname === '/transactions' && background && background.pathname !== '/transactions'
   const displayedLocation = composing ? background : location
@@ -140,11 +145,12 @@ export default function App() {
             <Route path="/sharing" element={<SharingPage />} />
             <Route path="/receipts" element={<ReceiptsPage />} />
             <Route path="/bill-checkin" element={<BillCheckinPage />} />
-            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin" element={adminAccess === 'allowed' ? <AdminPage /> : adminAccess === 'checking' ? <p className="data-status" role="status">Đang kiểm tra quyền truy cập…</p> : <Navigate to="/" replace />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
             <Route path="/loans" element={<LoansPage />} />
             <Route path="/budgets" element={<BudgetsPage />} />
+            <Route path="/planned-expenses" element={<PlannedExpensesPage />} />
             <Route path="/categories" element={<CategoriesPage />} />
             <Route path="/more" element={<MoreMenuPage />} />
             <Route path="/settings" element={<SettingsPage />} />

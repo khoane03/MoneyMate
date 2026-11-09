@@ -9,6 +9,7 @@ import { fetchAllPages } from '../../shared/lib/pagination'
 import { calculateLoanPaid, calculateLoanRemaining, calculateOutstanding } from '../../shared/lib/loanBalances'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
+import { getPrivateImageUrl } from '../../shared/lib/privateMedia'
 
 type LoanRow = {
   id: string
@@ -72,9 +73,8 @@ export function LoansPage() {
       if (paymentRows.length) {
         const evidence = await client.from('shared_loan_payment_evidence').select('shared_payment_id,storage_path').in('shared_payment_id', paymentRows.map(payment => payment.id))
         if (!evidence.error) await Promise.all((evidence.data ?? []).map(async item => {
-          const { data: signed } = await client.storage.from('receipt-files').createSignedUrl(item.storage_path, 1800)
           const payment = paymentRows.find(row => row.id === item.shared_payment_id)
-          if (payment) payment.evidence_url = signed?.signedUrl ?? null
+          if (payment) payment.evidence_url = await getPrivateImageUrl(item.storage_path, 1800).catch(() => null)
         }))
       }
       setSharedPayments(paymentRows)

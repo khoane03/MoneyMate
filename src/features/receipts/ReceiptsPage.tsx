@@ -12,11 +12,12 @@ import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
 import { useConfirm } from '../../shared/ui/useConfirm'
+import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
 
 type Wallet = { id: string; display_name: string }
 type Category = { id: string; name: string }
 type ReceiptItemDraft = { id: string; name: string; quantity: string; unitPrice: string; confidence: number | null }
-type ReceiptRecord = { id: string; storage_path: string; merchant: string; accounting_date: string; total_bigint: string; original_name: string; ocr_confidence: number | null; created_at: string }
+type ReceiptRecord = { id: string; storage_path: string | null; merchant: string; accounting_date: string; total_bigint: string; original_name: string; ocr_confidence: number | null; created_at: string }
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024
 const RECEIPT_PAGE_SIZE = 30
 const todayHcm = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date())
@@ -203,12 +204,10 @@ export function ReceiptsPage() {
     let amount: bigint
     try { amount = parseVnd(total); if (amount <= 0n) throw new Error() } catch { setError('Tổng hóa đơn cần là số nguyên đồng dương.'); return }
     setSaving(true)
-    const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp'
-    const storagePath = `${userId}/${receiptId}.${extension}`
+    let storagePath: string | null = null
     try {
       const checksum = await sha256(file)
-      const { error: uploadError } = await supabase.storage.from('receipt-files').upload(storagePath, file, { contentType: file.type, upsert: true, cacheControl: '3600' })
-      if (uploadError) throw new Error('Không tải được ảnh lên kho riêng tư. Kiểm tra kết nối và thử lại; ảnh chưa được đưa lên công khai.')
+      storagePath = await uploadPrivateImage(file, 'receipt', checksum)
       const occurredAt = new Date(`${accountingDate}T12:00:00+07:00`).toISOString()
       const rpcItems = items.map((item, index) => ({ name: item.name.trim(), quantity: item.quantity.replace(',','.'), unit_price: item.unitPrice, confidence: item.confidence, position: index }))
       const { error: saveError } = await supabase.rpc('create_receipt_expense', {
@@ -222,7 +221,10 @@ export function ReceiptsPage() {
       setNotice('Đã lưu hóa đơn riêng tư và ghi đúng một giao dịch chi vào ví của bạn.')
       setFile(null); setReceiptId(''); setIdempotencyKey(createUuid()); setItems([]); setTotal(''); setMerchant(''); setOcrConfidence(null); setOcrProgress(0)
       await refresh()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể lưu hóa đơn. Dữ liệu vẫn còn trên biểu mẫu để thử lại.') }
+    } catch (cause) {
+      if (storagePath) await deletePrivateImage(storagePath).catch(() => undefined)
+      setError(cause instanceof Error ? cause.message : 'Không thể lưu hóa đơn. Dữ liệu vẫn còn trên biểu mẫu để thử lại.')
+    }
     setSaving(false)
   }
 
@@ -254,10 +256,8 @@ export function ReceiptsPage() {
 
 function ReceiptHistoryRow({receipt}:{receipt:ReceiptRecord}) {
   async function loadImage() {
-    if(!supabase) throw new Error('missing backend')
-    const {data,error}=await supabase.storage.from('receipt-files').createSignedUrl(receipt.storage_path,60)
-    if(error||!data?.signedUrl) throw error ?? new Error('missing signed URL')
-    return data.signedUrl
+    if(!receipt.storage_path) throw new Error('Ảnh hóa đơn cũ đã được xóa.')
+    return getPrivateImageUrl(receipt.storage_path,300)
   }
-  return <li><div><strong>{receipt.merchant||'Hóa đơn'}</strong><small>{formatDate(receipt.accounting_date)} · {receipt.original_name}</small></div><b>{formatVnd(receipt.total_bigint)}</b><ImageViewer loadSrc={loadImage} alt={`Ảnh hóa đơn ${receipt.merchant||receipt.accounting_date}`} label={`Xem ảnh hóa đơn ${receipt.merchant||receipt.accounting_date}`} className="secondary-button"><FileImage size={16}/>Xem ảnh</ImageViewer></li>
+  return <li><div><strong>{receipt.merchant||'Hóa đơn'}</strong><small>{formatDate(receipt.accounting_date)} · {receipt.original_name}</small></div><b>{formatVnd(receipt.total_bigint)}</b>{receipt.storage_path&&<ImageViewer loadSrc={loadImage} alt={`Ảnh hóa đơn ${receipt.merchant||receipt.accounting_date}`} label={`Xem ảnh hóa đơn ${receipt.merchant||receipt.accounting_date}`} className="secondary-button"><FileImage size={16}/>Xem ảnh</ImageViewer>}</li>
 }

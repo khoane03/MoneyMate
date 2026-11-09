@@ -111,6 +111,44 @@ body {
   color: var(--text);
 }
 
+/* Planned expenses: forecasts stay visually distinct from posted ledger entries. */
+.planned-page { display: grid; gap: 20px; }
+.planned-total { min-width: 210px; padding: 14px 16px; border: 1px solid var(--border-cyan); border-radius: 16px; background: var(--accent-cyan-soft); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; }
+.planned-total span { color: var(--muted); font-size: .78rem; }
+.planned-total strong { grid-column: 2; font-size: 1.15rem; }
+.planned-form, .planned-convert { padding: 20px; border: 1px solid var(--border); border-radius: var(--content-radius); background: var(--surface-raised); box-shadow: var(--content-shadow); }
+.planned-form-heading, .planned-actions, .planned-tabs { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.planned-form-heading h2, .planned-convert h4 { margin: 4px 0 0; }
+.planned-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+.planned-form-grid label { display: grid; gap: 7px; color: var(--muted); font-size: .86rem; font-weight: 600; }
+.planned-form-grid input, .planned-form-grid textarea { width: 100%; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); padding: 11px 12px; }
+.planned-note-field { grid-column: 1 / -1; }
+.planned-tabs { justify-content: flex-start; border-bottom: 1px solid var(--border); }
+.planned-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 11px 12px; color: var(--muted); border-bottom: 2px solid transparent; }
+.planned-tabs button[aria-selected='true'] { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.planned-list { list-style: none; display: grid; gap: 12px; padding: 0; margin: 0; }
+.planned-card { padding: 17px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-raised); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; }
+.planned-card-main h3 { margin: 7px 0 4px; font-size: 1rem; }
+.planned-card-main > strong { font-size: 1.18rem; }
+.planned-card-main p { color: var(--muted); margin: 6px 0 0; font-size: .82rem; }
+.planned-due { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .72rem; font-weight: 700; }
+.planned-due.overdue, .planned-due.cancelled { background: var(--expense-soft); color: var(--expense); }
+.planned-due.today { background: #fff1c7; color: #72520a; }
+.planned-due.converted { background: var(--income-soft); color: var(--income); }
+.planned-due.skipped { background: var(--surface); color: var(--muted); }
+.planned-actions { justify-content: flex-end; align-self: center; }
+.planned-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.planned-convert { grid-column: 1 / -1; background: var(--surface); box-shadow: none; }
+.planned-convert > p { color: var(--muted); margin: 6px 0; }
+.planned-offline { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: var(--accent-cyan); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .planned-form-grid { grid-template-columns: 1fr; }
+  .planned-card { grid-template-columns: 1fr; }
+  .planned-actions { justify-content: flex-start; }
+  .planned-total { width: 100%; }
+}
+
 #root {
   min-height: 100vh;
   min-height: 100dvh;
@@ -4912,6 +4950,17 @@ select:focus-visible {
   .mobile-plus-action > svg { flex: 0 0 auto; width: 20px; height: 20px; }
   .mobile-plus-action > .mobile-plus-label { display: none; }
   .loans-header-actions .mobile-plus-action { width: 48px; min-width: 48px; }
+  .balance-overview-card .card-action-btn.mobile-plus-action {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    gap: 8px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .balance-overview-card .card-action-btn.mobile-plus-action > .mobile-plus-label {
+    display: inline;
+  }
 }
 
 /* Loan ledger: clearer debt hierarchy on desktop and touch-first on phones. */

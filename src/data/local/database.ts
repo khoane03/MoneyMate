@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 
-export type LocalRecord = { id: string; ownerId: string; updatedAt: string; version: number; syncState: 'local' | 'pending' | 'synced' | 'conflict' }
+export type LocalRecord = { id: string; ownerId: string; updatedAt: string; version: number; syncState: 'local' | 'pending' | 'synced' | 'conflict'; data?: unknown }
 export type OutboxCommand = { id: string; actorId: string; scopeId: string; operation: string; payload: unknown; expectedVersion: number | null; createdAt: string; retries: number; state: 'queued' | 'retry' | 'blocked' }
 export type SyncCursor = { ownerId: string; cursor: number; updatedAt: string }
 export type ConflictRecord = { id: string; ownerId: string; entityId: string; local: unknown; remote: unknown; createdAt: string }
