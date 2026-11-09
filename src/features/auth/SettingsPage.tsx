@@ -5,7 +5,7 @@ import { supabase } from '../../shared/lib/supabase'
 import { clearUserPartition } from '../../data/local/database'
 import { useTheme } from '../../shared/lib/themeContext'
 import { prepareAvatar, profileInitial, useAccountProfile } from './accountProfile'
-import { deletePrivateImage, uploadPrivateImage } from '../../shared/lib/privateMedia'
+import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
 
 export function SettingsPage() {
   const [busy, setBusy] = useState(false)
@@ -16,7 +16,7 @@ export function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const { theme, toggleTheme } = useTheme()
-  const { profile, loading, error: profileError, refresh } = useAccountProfile()
+  const { profile, setProfile, loading, error: profileError } = useAccountProfile()
   const displayName = name ?? profile?.displayName ?? ''
   const currentAvatar = avatarPreview ?? profile?.avatarUrl ?? null
 
@@ -33,13 +33,23 @@ export function SettingsPage() {
         uploadedPath = await uploadPrivateImage(image, 'avatar')
       }
       const nextPath = uploadedPath ?? profile.avatarPath
-      const { error: updateError } = await supabase.from('profiles').update({ display_name: normalizedName, avatar_storage_path: nextPath }).eq('user_id', profile.userId)
+      const { data: savedProfile, error: updateError } = await supabase.from('profiles')
+        .update({ display_name: normalizedName, avatar_storage_path: nextPath })
+        .eq('user_id', profile.userId)
+        .select('user_id,display_name,avatar_storage_path')
+        .maybeSingle()
       if (updateError) throw updateError
+      // PostgREST can return no error when RLS filters an update to zero rows.
+      // Treat that as a failed save instead of showing a misleading success state.
+      if (!savedProfile) throw new Error('Không tìm thấy hồ sơ để cập nhật.')
+      const avatarUrl = savedProfile.avatar_storage_path
+        ? await getPrivateImageUrl(savedProfile.avatar_storage_path, 3600).catch(() => null)
+        : null
+      setProfile({ userId: savedProfile.user_id, displayName: savedProfile.display_name, avatarPath: savedProfile.avatar_storage_path, avatarUrl })
       if (avatarFile && profile.avatarPath) {
         await deletePrivateImage(profile.avatarPath).catch(() => console.warn('Old private avatar cleanup failed'))
       }
       setName(null); setAvatarFile(null); setAvatarPreview(null); setNotice('Đã cập nhật hồ sơ tài khoản.')
-      await refresh()
     } catch (cause) {
       if (uploadedPath) await deletePrivateImage(uploadedPath).catch(() => undefined)
       setError(cause instanceof Error && cause.message.startsWith('Ảnh') || cause instanceof Error && cause.message.startsWith('Chỉ') || cause instanceof Error && cause.message.startsWith('Không')
@@ -50,10 +60,12 @@ export function SettingsPage() {
   async function removeAvatar() {
     if (!supabase || !profile?.avatarPath) return
     setBusy(true); setError(''); setNotice('')
-    const { error: updateError } = await supabase.from('profiles').update({ avatar_storage_path: null }).eq('user_id', profile.userId)
-    if (updateError) { setError('Không thể gỡ ảnh đại diện. Vui lòng thử lại.'); setBusy(false); return }
+    const { data: savedProfile, error: updateError } = await supabase.from('profiles').update({ avatar_storage_path: null })
+      .eq('user_id', profile.userId).select('user_id,display_name,avatar_storage_path').maybeSingle()
+    if (updateError || !savedProfile) { setError('Không thể gỡ ảnh đại diện. Vui lòng thử lại.'); setBusy(false); return }
     await deletePrivateImage(profile.avatarPath).catch(() => undefined)
-    setAvatarFile(null); setAvatarPreview(null); setName(null); setNotice('Đã gỡ ảnh đại diện.'); await refresh(); setBusy(false)
+    setProfile({ userId: savedProfile.user_id, displayName: savedProfile.display_name, avatarPath: null, avatarUrl: null })
+    setAvatarFile(null); setAvatarPreview(null); setName(null); setNotice('Đã gỡ ảnh đại diện.'); setBusy(false)
   }
 
   async function signOut() {
