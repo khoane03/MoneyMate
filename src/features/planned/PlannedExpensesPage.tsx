@@ -44,7 +44,7 @@ export function PlannedExpensesPage() {
     }
     await flushPlannedExpenseOutbox(ownerId)
     const [plans, categoryResult, walletResult, pending] = await Promise.all([
-      client.from('planned_expenses').select('id,amount_bigint,expected_date,category_id,wallet_id,note,reminder_days,status,converted_transaction_id,version,created_at,updated_at').order('expected_date').order('id'),
+      client.from('planned_expenses').select('id,amount_bigint::text,expected_date,category_id,wallet_id,note,reminder_days,status,converted_transaction_id,version,created_at,updated_at').order('expected_date').order('id'),
       client.from('categories').select('id,name').eq('kind', 'expense').order('name'),
       client.from('wallets').select('id,display_name').eq('status', 'active').order('display_name'),
       getPendingPlannedExpenses(ownerId),
@@ -86,9 +86,16 @@ export function PlannedExpensesPage() {
       setNotice('Đã lưu trên thiết bị. Khoản dự kiến sẽ tự đồng bộ khi có mạng.')
       setForm({ ...emptyForm(), walletId: wallets[0]?.id ?? '' }); await refresh(); setBusy(false); return
     }
-    const result = editing
-      ? await supabase.rpc('update_planned_expense', { p_id: editing.id, p_expected_version: editing.version, p_amount_bigint: form.amount, p_expected_date: form.expectedDate, p_category_id: form.categoryId || null, p_wallet_id: form.walletId || null, p_note: form.note.trim(), p_reminder_days: Number(form.reminderDays) })
-      : await supabase.rpc('create_planned_expense', { p_id: id, p_amount_bigint: form.amount, p_expected_date: form.expectedDate, p_category_id: form.categoryId || null, p_wallet_id: form.walletId || null, p_note: form.note.trim(), p_reminder_days: Number(form.reminderDays), p_idempotency_key: crypto.randomUUID() })
+    let result
+    try {
+      result = editing
+        ? await supabase.rpc('update_planned_expense', { p_id: editing.id, p_expected_version: editing.version, p_amount_bigint: form.amount, p_expected_date: form.expectedDate, p_category_id: form.categoryId || null, p_wallet_id: form.walletId || null, p_note: form.note.trim(), p_reminder_days: Number(form.reminderDays) })
+        : await supabase.rpc('create_planned_expense', { p_id: id, p_amount_bigint: form.amount, p_expected_date: form.expectedDate, p_category_id: form.categoryId || null, p_wallet_id: form.walletId || null, p_note: form.note.trim(), p_reminder_days: Number(form.reminderDays), p_idempotency_key: crypto.randomUUID() })
+    } catch {
+      setError('Không lưu được khoản dự kiến. Hãy kiểm tra kết nối và thử lại.')
+      setBusy(false)
+      return
+    }
     if (result.error) setError(result.error.code === '40001' ? 'Khoản dự kiến vừa được thay đổi ở thiết bị khác. Hãy tải lại.' : 'Không lưu được khoản dự kiến. Hãy kiểm tra dữ liệu và thử lại.')
     else { setNotice(editing ? 'Đã cập nhật khoản chi dự kiến.' : 'Đã thêm khoản chi dự kiến.'); setEditing(null); setForm({ ...emptyForm(), walletId: wallets[0]?.id ?? '' }); await refresh(); window.dispatchEvent(new Event('moneymate:financial-change')) }
     setBusy(false)
@@ -111,10 +118,13 @@ export function PlannedExpensesPage() {
     try { validate(actual); if (!actual.walletId) throw new Error('Hãy chọn ví thực tế đã chi.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Dữ liệu chưa hợp lệ.'); return }
     setBusy(true)
     const occurredAt = new Date(`${actual.expectedDate}T12:00:00+07:00`).toISOString()
-    const result = await supabase.rpc('convert_planned_expense', { p_id: converting.id, p_expected_version: converting.version, p_wallet_id: actual.walletId, p_amount_bigint: actual.amount, p_occurred_at: occurredAt, p_accounting_date: actual.expectedDate, p_category_id: actual.categoryId || null, p_note: actual.note.trim(), p_idempotency_key: crypto.randomUUID() })
-    if (result.error) setError('Không thể ghi khoản chi thực tế. Số dư ví chưa thay đổi; hãy tải lại và thử lại.')
-    else { setConverting(null); setNotice('Đã ghi khoản chi thực tế và giữ lại kế hoạch để đối chiếu.'); await refresh(); window.dispatchEvent(new Event('moneymate:financial-change')) }
-    setBusy(false)
+    try {
+      const result = await supabase.rpc('convert_planned_expense', { p_id: converting.id, p_expected_version: converting.version, p_wallet_id: actual.walletId, p_amount_bigint: actual.amount, p_occurred_at: occurredAt, p_accounting_date: actual.expectedDate, p_category_id: actual.categoryId || null, p_note: actual.note.trim(), p_idempotency_key: crypto.randomUUID() })
+      if (result.error) setError('Không thể ghi khoản chi thực tế. Số dư ví chưa thay đổi; hãy tải lại và thử lại.')
+      else { setConverting(null); setNotice('Đã ghi khoản chi thực tế và giữ lại kế hoạch để đối chiếu.'); await refresh(); window.dispatchEvent(new Event('moneymate:financial-change')) }
+    } catch {
+      setError('Không thể ghi khoản chi thực tế. Số dư ví chưa thay đổi; hãy tải lại và thử lại.')
+    } finally { setBusy(false) }
   }
 
   async function changeStatus(row: PlannedExpense, status: 'planned' | 'skipped' | 'cancelled') {
