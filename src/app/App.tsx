@@ -72,6 +72,12 @@ export default function App() {
   const displayedLocation = composing ? background : location
   const currentTitle = titleMap[displayedLocation.pathname] ?? 'MoneyMate'
 
+  useEffect(() => {
+    if (!saveNotice) return
+    const timer = window.setTimeout(() => setSaveNotice(''), 5000)
+    return () => window.clearTimeout(timer)
+  }, [saveNotice])
+
   return (
     <div className="app-shell">
       <UsageTracker />

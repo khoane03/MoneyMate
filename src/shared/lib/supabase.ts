@@ -5,6 +5,7 @@ const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const publishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined
 
 let usageSessionId: string | null = null
+let clearingExpiredSession = false
 const pendingRequests = new Map<string, number>()
 let requestFlushInProgress = false
 
@@ -17,10 +18,24 @@ function countSupabaseRequest(input: RequestInfo | URL) {
 
 async function trackedFetch(input: RequestInfo | URL, init?: RequestInit) {
   try {
-    return await fetch(input, init)
+    const response = await fetch(input, init)
+    const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    // A 401 from Supabase means the current credential is no longer accepted.
+    // Clear only this device's session so AuthGate returns to sign-in immediately.
+    if (response.status === 401 && url && requestUrl.startsWith(url)) {
+      void clearExpiredSession()
+    }
+    return response
   } finally {
     countSupabaseRequest(input)
   }
+}
+
+export async function clearExpiredSession() {
+  if (!supabase || clearingExpiredSession) return
+  clearingExpiredSession = true
+  try { await supabase.auth.signOut({ scope: 'local' }) }
+  finally { clearingExpiredSession = false }
 }
 
 export function setUsageSession(sessionId: string | null) {

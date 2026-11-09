@@ -1,5 +1,5 @@
 import { Button as CommonButton, Input as CommonInput } from '../../shared/ui/Controls'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, WalletCards } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { z } from 'zod'
@@ -27,6 +27,12 @@ export function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!message) return
+    const timer = window.setTimeout(() => setMessage(''), 6000)
+    return () => window.clearTimeout(timer)
+  }, [message])
 
   function changeMode(nextMode: AuthMode) {
     setMode(nextMode)
