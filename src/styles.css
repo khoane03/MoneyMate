@@ -1758,6 +1758,15 @@ select:focus-visible {
   margin-top: 4px;
 }
 
+.amount-in-words {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .field-group {
   display: grid;
   gap: 6px;

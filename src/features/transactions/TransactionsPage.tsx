@@ -11,6 +11,7 @@ import { formatDate } from '../../shared/lib/dateFormat'
 import { fetchAllPages } from '../../shared/lib/pagination'
 import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
+import { AmountInWords } from '../../shared/ui/AmountInWords'
 import { ReceiptAutofill } from '../../shared/ui/ReceiptAutofill'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
 import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
@@ -568,6 +569,7 @@ export function TransactionsPage({ composerOnly = false, onClose, onSaved }: { c
                   {amount && (
                     <small className="amount-preview-label">{formatVnd(amount)}</small>
                   )}
+                  <AmountInWords id="tx-amount" value={amount} />
                 </div>
 
                 <div className={`form-grid-2 ${walletlessHistoryEntry ? 'loan-date-only' : ''}`}>
@@ -674,6 +676,7 @@ export function TransactionsPage({ composerOnly = false, onClose, onSaved }: { c
                     required
                     autoFocus
                   />
+                  <AmountInWords id="transfer-amount" value={amount} />
                   {amount && (
                     <small className="amount-preview-label">{formatVnd(amount)}</small>
                   )}

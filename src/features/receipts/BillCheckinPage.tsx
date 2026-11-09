@@ -9,6 +9,7 @@ import { fetchAllPages } from '../../shared/lib/pagination'
 import { scanReceiptImage, type ReceiptOcrWorker, type ReceiptScanProgress } from '../../shared/lib/receiptScanner'
 import { Button, Dropdown, Input } from '../../shared/ui/Controls'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
+import { AmountInWords } from '../../shared/ui/AmountInWords'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
 import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
 
@@ -294,7 +295,7 @@ export function BillCheckinPage() {
       <section className="bill-checkin-entry">
         <div className="bill-checkin-entry-heading"><div><p className="bill-checkin-kicker">LƯU THÀNH KHOẢN CHI</p><h1 id="bill-checkin-title">Check-in hôm nay</h1><p>Lưu sản phẩm, món ăn hoặc khoản chi. Ảnh chỉ mình bạn xem.</p></div><ReceiptText size={24}/></div>
         <form className="bill-checkin-form" onSubmit={save}>
-          <div className="bill-checkin-amount-field"><label htmlFor="bill-checkin-amount">Số tiền đã chi</label><div><Input id="bill-checkin-amount" inputMode="numeric" value={amount} onChange={event => { rotateRequest(); setAmount(normalizeVndInput(event.target.value)) }} placeholder="0" required /><span>₫</span></div>{amount && <small>{formatVnd(amount)}</small>}</div>
+          <div className="bill-checkin-amount-field"><label htmlFor="bill-checkin-amount">Số tiền đã chi</label><div><Input id="bill-checkin-amount" inputMode="numeric" value={amount} onChange={event => { rotateRequest(); setAmount(normalizeVndInput(event.target.value)) }} placeholder="0" required /><span>₫</span></div>{amount && <small>{formatVnd(amount)}</small>}<AmountInWords id="bill-checkin-amount" value={amount}/></div>
           <div className="bill-checkin-field"><label htmlFor="bill-checkin-caption">Sản phẩm / nội dung chi</label><Input id="bill-checkin-caption" value={caption} onChange={event => { rotateRequest(); setCaption(event.target.value) }} maxLength={240} placeholder="Ví dụ: Tai nghe mới, Cà phê sáng…" required /></div>
           <div className="bill-checkin-field"><label htmlFor="bill-checkin-date">Ngày ghi sổ</label><Input id="bill-checkin-date" type="date" value={date} onChange={event => { rotateRequest(); setDate(event.target.value) }} required /></div>
           <div className="bill-checkin-field"><label htmlFor="bill-checkin-wallet">Trừ từ ví</label><Dropdown id="bill-checkin-wallet" value={walletId} onChange={event => { rotateRequest(); setWalletId(event.target.value) }} required><option value="">Chọn ví</option>{wallets.map(wallet => <option key={wallet.id} value={wallet.id}>{wallet.display_name}</option>)}</Dropdown></div>

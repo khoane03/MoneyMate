@@ -16,6 +16,7 @@ import { formatVnd, normalizeVndInput, parseVnd } from '../../shared/lib/money'
 import { fetchAllPages } from '../../shared/lib/pagination'
 import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
+import { AmountInWords } from '../../shared/ui/AmountInWords'
 
 type Wallet = {
   id: string
@@ -261,6 +262,7 @@ export function WalletsPage() {
                 {opening && (
                   <small className="amount-preview-label">{formatVnd(opening)}</small>
                 )}
+                <AmountInWords id="wallet-opening" value={opening} />
                 <p className="field-help" style={{ marginTop: '4px', textAlign: 'center' }}>
                   Số tiền tính theo đồng Việt Nam (VND), không có phần thập phân.
                 </p>
