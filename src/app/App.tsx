@@ -30,6 +30,7 @@ const BudgetsPage = lazy(() => import('../features/budgets/BudgetsPage').then(mo
 const PlannedExpensesPage = lazy(() => import('../features/planned/PlannedExpensesPage').then(module => ({ default: module.PlannedExpensesPage })))
 const CategoriesPage = lazy(() => import('../features/categories/CategoriesPage').then(module => ({ default: module.CategoriesPage })))
 const MoreMenuPage = lazy(() => import('../features/more/MoreMenuPage').then(module => ({ default: module.MoreMenuPage })))
+const GuidePage = lazy(() => import('../features/more/GuidePage').then(module => ({ default: module.GuidePage })))
 const SettingsPage = lazy(() => import('../features/auth/SettingsPage').then(module => ({ default: module.SettingsPage })))
 const NotificationsPage = lazy(() => import('../features/notifications/NotificationsPage').then(module => ({ default: module.NotificationsPage })))
 
@@ -57,6 +58,7 @@ const titleMap: Record<string, string> = {
   '/notifications': 'Thông báo',
   '/settings': 'Cài đặt tài khoản',
   '/more': 'Menu chức năng',
+  '/guide': 'Hướng dẫn sử dụng',
 }
 
 export default function App() {
@@ -153,6 +155,7 @@ export default function App() {
             <Route path="/planned-expenses" element={<PlannedExpensesPage />} />
             <Route path="/categories" element={<CategoriesPage />} />
             <Route path="/more" element={<MoreMenuPage />} />
+            <Route path="/guide" element={<GuidePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="*" element={<ErrorScreen kind="not-found" />} />

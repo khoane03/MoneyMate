@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  BarChart3, Bell, CalendarClock, Camera, FolderTree, HandCoins, Landmark, ScanLine, Settings2,
+  BarChart3, Bell, BookOpen, CalendarClock, Camera, FolderTree, HandCoins, Landmark, ScanLine, Settings2,
   ShieldCheck, Target, User, WalletCards,
 } from 'lucide-react'
 import { useNotifications } from '../notifications/notificationContext'
@@ -31,6 +31,7 @@ const menuGroups = [
   {
     title: 'HỆ THỐNG & BẢO MẬT',
     items: [
+      { to: '/guide', tone: 'settings', icon: BookOpen, title: 'Hướng dẫn sử dụng', description: 'Cách ghi chép, chia tiền và theo dõi tài chính' },
       { to: '/notifications', tone: 'notification', icon: Bell, title: 'Thông báo', description: 'Cập nhật từ sổ chia tiền, công nợ và quản trị', unread: true },
       { to: '/settings', tone: 'settings', icon: Settings2, title: 'Cài đặt & Phiên đăng nhập', description: 'Quản lý tài khoản, đồng bộ và đăng xuất' },
       { to: '/admin', tone: 'admin', icon: ShieldCheck, title: 'Khu vực quản trị', description: 'Cấu hình hệ thống và danh mục mặc định' },

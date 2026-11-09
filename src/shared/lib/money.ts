@@ -21,25 +21,29 @@ export function formatVnd(value: bigint | string): string {
 const vietnameseDigits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín']
 const vietnameseScales = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ', 'triệu tỷ', 'tỷ tỷ']
 
+function digitWord(value: number): string {
+  return vietnameseDigits[value] ?? ''
+}
+
 function readVietnameseGroup(value: number, fillHundreds: boolean): string {
   const hundreds = Math.floor(value / 100)
   const tensAndOnes = value % 100
   const parts: string[] = []
 
-  if (hundreds > 0 || fillHundreds) parts.push(`${vietnameseDigits[hundreds]} trăm`)
+  if (hundreds > 0 || fillHundreds) parts.push(`${digitWord(hundreds)} trăm`)
   if (tensAndOnes === 0) return parts.join(' ')
 
   const tens = Math.floor(tensAndOnes / 10)
   const ones = tensAndOnes % 10
   if (tens === 0) {
     if (hundreds > 0 || fillHundreds) parts.push('lẻ')
-    parts.push(vietnameseDigits[ones])
+    parts.push(digitWord(ones))
   } else if (tens === 1) {
     parts.push('mười')
-    if (ones > 0) parts.push(ones === 5 ? 'lăm' : vietnameseDigits[ones])
+    if (ones > 0) parts.push(ones === 5 ? 'lăm' : digitWord(ones))
   } else {
-    parts.push(`${vietnameseDigits[tens]} mươi`)
-    if (ones > 0) parts.push(ones === 1 ? 'mốt' : ones === 5 ? 'lăm' : vietnameseDigits[ones])
+    parts.push(`${digitWord(tens)} mươi`)
+    if (ones > 0) parts.push(ones === 1 ? 'mốt' : ones === 5 ? 'lăm' : digitWord(ones))
   }
   return parts.join(' ')
 }
@@ -65,7 +69,7 @@ export function amountInVietnameseWords(value: string): string | null {
     return [`${spoken}${vietnameseScales[index] ? ` ${vietnameseScales[index]}` : ''}`]
   }).reverse()
   const result = `${words.join(' ')} đồng`
-  return result[0].toLocaleUpperCase('vi-VN') + result.slice(1)
+  return result.replace(/^[a-z]/, first => first.toLocaleUpperCase('vi-VN'))
 }
 
 export function allocateEqual(total: bigint, participantIds: readonly string[]): Map<string, bigint> {
