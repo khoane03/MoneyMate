@@ -1933,6 +1933,12 @@ select:focus-visible {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.reconcile-quick-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-soft, #e0f2fe);
+  color: var(--primary);
+  font-weight: 600;
+}
 .modal-danger-btn {
   background: var(--expense);
   color: #fff;

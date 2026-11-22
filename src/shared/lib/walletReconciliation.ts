@@ -1,6 +1,14 @@
 import { supabase } from './supabase'
 import { createUuid } from './uuid'
 
+function parseBigIntSafe(val: unknown): bigint {
+  if (typeof val === 'bigint') return val
+  if (typeof val === 'number') return BigInt(Math.round(val))
+  const parts = String(val ?? '0').trim().split('.')
+  const str = (parts[0] ?? '0').replace(/[^0-9-]/g, '')
+  return str === '' || str === '-' ? 0n : BigInt(str)
+}
+
 function notifyFinancialChange() {
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(new CustomEvent('moneymate:financial-change'))
@@ -54,12 +62,18 @@ export async function reconcileWalletBalance(
     .eq('id', walletId)
     .single()
 
-  if (balanceError || !balanceData) {
-    throw new Error('Không thể kiểm tra số dư hiện tại của ví.')
+  let currentBalanceStr = balanceData?.current_balance_bigint
+  if (balanceError || currentBalanceStr === undefined || currentBalanceStr === null) {
+    const { data: walletData } = await supabase
+      .from('wallets')
+      .select('opening_balance_bigint')
+      .eq('id', walletId)
+      .single()
+    currentBalanceStr = walletData?.opening_balance_bigint ?? '0'
   }
 
-  const currentBalance = BigInt(balanceData.current_balance_bigint)
-  const target = BigInt(targetBalance)
+  const currentBalance = parseBigIntSafe(currentBalanceStr)
+  const target = parseBigIntSafe(targetBalance)
   const diff = target - currentBalance
 
   if (diff === 0n) {
@@ -122,7 +136,10 @@ export async function reconcileWalletBalance(
     .select('id')
     .single()
 
-  if (insertError) throw rpcError || insertError
+  if (insertError) {
+    const errorMsg = rpcError?.message || insertError?.message || 'Không thể tạo bút toán điều chỉnh.'
+    throw new Error(errorMsg)
+  }
 
   notifyFinancialChange()
   return {
@@ -214,19 +231,24 @@ export type UpdateWalletInput = {
   id: string
   displayName: string
   kind: 'cash' | 'bank' | 'ewallet' | 'credit'
+  openingBalance?: string
   status?: 'active' | 'archived'
 }
 
 export async function updateWallet(input: UpdateWalletInput): Promise<void> {
   if (!supabase) throw new Error('Chưa kết nối dịch vụ.')
+  const updatePayload: Record<string, unknown> = {
+    display_name: input.displayName.trim(),
+    kind: input.kind,
+    ...(input.status ? { status: input.status } : {}),
+    updated_at: new Date().toISOString(),
+  }
+  if (input.openingBalance !== undefined) {
+    updatePayload.opening_balance_bigint = input.openingBalance
+  }
   const { error } = await supabase
     .from('wallets')
-    .update({
-      display_name: input.displayName.trim(),
-      kind: input.kind,
-      ...(input.status ? { status: input.status } : {}),
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq('id', input.id)
 
   if (error) throw error

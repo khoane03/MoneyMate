@@ -76,6 +76,7 @@ export function WalletsPage() {
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null)
   const [editName, setEditName] = useState('')
   const [editKind, setEditKind] = useState<Wallet['kind']>('cash')
+  const [editOpening, setEditOpening] = useState('0')
   const [editStatus, setEditStatus] = useState<'active' | 'archived'>('active')
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState('')
@@ -85,6 +86,7 @@ export function WalletsPage() {
     setEditingWallet(wallet)
     setEditName(wallet.display_name)
     setEditKind(wallet.kind)
+    setEditOpening(wallet.opening_balance_bigint)
     setEditStatus(wallet.status)
     setEditError('')
     setConfirmDelete(false)
@@ -98,6 +100,14 @@ export function WalletsPage() {
       setEditError('Tên ví không được để trống.')
       return
     }
+    const cleanOpening = editOpening.replace(/[^0-9]/g, '')
+    const finalOpening = cleanOpening === '' ? '0' : cleanOpening
+    try {
+      parseVnd(finalOpening)
+    } catch {
+      setEditError('Số dư ban đầu không hợp lệ.')
+      return
+    }
     setEditBusy(true)
     setEditError('')
     try {
@@ -105,13 +115,15 @@ export function WalletsPage() {
         id: editingWallet.id,
         displayName: trimmed,
         kind: editKind,
+        openingBalance: finalOpening,
         status: editStatus,
       })
       setSuccessMessage(`Đã cập nhật thông tin ví "${trimmed}".`)
       setEditingWallet(null)
       await refresh()
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Không thể cập nhật ví.')
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || 'Không thể cập nhật ví.'
+      setEditError(msg)
     } finally {
       setEditBusy(false)
     }
@@ -145,7 +157,8 @@ export function WalletsPage() {
     event.preventDefault()
     if (!reconcilingWallet) return
     setReconcileError('')
-    const finalTarget = targetBalance.trim() === '' ? '0' : targetBalance
+    const cleanTarget = targetBalance.replace(/[^0-9]/g, '')
+    const finalTarget = cleanTarget === '' ? '0' : cleanTarget
     try {
       parseVnd(finalTarget)
     } catch {
@@ -170,7 +183,9 @@ export function WalletsPage() {
       setReconcilingWallet(null)
       await refresh()
     } catch (err) {
-      setReconcileError(err instanceof Error ? err.message : 'Không thể điều chỉnh số dư ví.')
+      console.error('Lỗi khi đặt lại số dư ví:', err)
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || 'Không thể điều chỉnh số dư ví.'
+      setReconcileError(msg)
     } finally {
       setReconcileBusy(false)
     }
@@ -541,19 +556,22 @@ export function WalletsPage() {
                 <div className="reconcile-quick-buttons">
                   <button
                     type="button"
-                    className="reconcile-quick-btn"
+                    className={`reconcile-quick-btn ${targetBalance === '0' ? 'active' : ''}`}
                     onClick={() => setTargetBalance('0')}
                   >
                     Đặt về 0 ₫
                   </button>
                   <button
                     type="button"
-                    className="reconcile-quick-btn"
+                    className={`reconcile-quick-btn ${targetBalance === reconcilingWallet.opening_balance_bigint ? 'active' : ''}`}
                     onClick={() => setTargetBalance(reconcilingWallet.opening_balance_bigint)}
                   >
                     Về số dư ban đầu ({formatVnd(reconcilingWallet.opening_balance_bigint)})
                   </button>
                 </div>
+                <p className="field-help" style={{ marginTop: '6px' }}>
+                  💡 Bấm nút <strong>&quot;Đặt về 0 ₫&quot;</strong>, sau đó bấm <strong>&quot;Xác nhận đặt lại số dư&quot;</strong> bên dưới để hoàn tất.
+                </p>
               </div>
 
               <div className="field-group">
@@ -563,7 +581,6 @@ export function WalletsPage() {
                   type="date"
                   value={reconcileDate}
                   onChange={event => setReconcileDate(event.target.value)}
-                  required
                 />
               </div>
 
@@ -592,7 +609,7 @@ export function WalletsPage() {
                 >
                   Hủy
                 </CommonButton>
-                <CommonButton className="primary-button" disabled={reconcileBusy}>
+                <CommonButton type="submit" className="primary-button" disabled={reconcileBusy}>
                   {reconcileBusy ? 'Đang điều chỉnh…' : 'Xác nhận đặt lại số dư'}
                 </CommonButton>
               </div>
@@ -665,6 +682,22 @@ export function WalletsPage() {
                     required
                     autoFocus
                   />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="edit-wallet-opening">Số dư ban đầu khi tạo ví (₫)</label>
+                  <CommonInput
+                    id="edit-wallet-opening"
+                    inputMode="numeric"
+                    value={editOpening}
+                    onChange={event => setEditOpening(normalizeVndInput(event.target.value))}
+                    placeholder="0 ₫"
+                  />
+                  <small className="amount-preview-label">{formatVnd(editOpening || '0')}</small>
+                  <AmountInWords id="edit-wallet-opening" value={editOpening || '0'} />
+                  <p className="field-help" style={{ marginTop: '4px' }}>
+                    Nếu muốn số dư ban đầu khi tạo ví là 0, bạn có thể chỉnh sửa trực tiếp tại đây.
+                  </p>
                 </div>
 
                 <div className="form-grid-2">
