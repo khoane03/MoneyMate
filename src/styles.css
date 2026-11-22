@@ -1877,6 +1877,71 @@ select:focus-visible {
   color: var(--expense);
 }
 
+.wallet-row-actions, .tx-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wallet-reset-btn, .tx-edit-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tx-list-row {
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.tx-list-row:hover {
+  border-color: var(--accent);
+}
+.reconcile-diff-box {
+  background: var(--surface-subtle, rgba(0,0,0,0.02));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+.reconcile-diff-box > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.reconcile-quick-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.reconcile-quick-btn {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 550;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.reconcile-quick-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.modal-danger-btn {
+  background: var(--expense);
+  color: #fff;
+  border: none;
+}
+.modal-danger-btn:hover {
+  opacity: 0.9;
+}
+
 .wallet-empty {
   text-align: center;
   background: var(--surface);
@@ -3630,6 +3695,35 @@ select:focus-visible {
   color: var(--muted);
   line-height: 1.55;
 }
+.loan-security-settings { gap: 16px; }
+.loan-security-heading { display: flex; align-items: flex-start; gap: 12px; }
+.loan-security-heading h2 { margin: 0 0 4px; font-size: 17px; }
+.loan-security-heading p, .loan-security-explainer { font-size: 13px; }
+.loan-security-icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; background: var(--accent-soft); color: var(--accent-strong); }
+.loan-security-state { width: fit-content; padding: 7px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; font-weight: 650; }
+.loan-security-state.enabled { border-color: color-mix(in srgb, var(--income) 38%, var(--border)); color: var(--income); }
+.loan-security-pin-form, .loan-security-passkey-row, .loan-security-disable { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.loan-security-pin-form .field-group, .loan-security-passkey-row > div { flex: 1; min-width: 0; }
+.loan-security-passkey-row { align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+.loan-security-passkey-row > div { display: grid; gap: 4px; }
+.loan-security-passkey-row small { color: var(--muted); line-height: 1.45; }
+.loan-security-disable { align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+.loan-security-disable p { flex: 1; font-size: 13px; }
+.loan-security-settings .field-group small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.loan-security-unlock-form { width: min(100%, 380px); display: grid; gap: 10px; }
+.loan-security-unlock-form label { font-size: 13px; font-weight: 600; }
+.loan-security-method { width: min(100%, 380px); }
+.loan-security-gate { width: min(calc(100% - 32px), 440px); display: grid; justify-items: start; gap: 16px; margin: 40px auto; padding: 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.loan-security-gate h1, .loan-security-gate p { margin: 0; }
+.loan-security-gate h1 { font-size: 21px; }
+.loan-security-gate > p { line-height: 1.5; }
+.loan-security-gate .form-error { color: var(--expense); }
+@media (max-width: 520px) {
+  .loan-security-settings { padding: 16px; }
+  .loan-security-pin-form, .loan-security-passkey-row, .loan-security-disable { align-items: stretch; flex-direction: column; }
+  .loan-security-gate { margin: 24px auto; padding: 20px; }
+  .loan-security-gate .primary-button, .loan-security-gate .secondary-button { width: 100%; }
+}
 .profile-settings-panel { gap: 18px; }
 .profile-editor { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .profile-photo { width: 88px; height: 88px; flex: 0 0 88px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 28px; background: var(--accent-soft); color: var(--accent-strong); font-size: 32px; font-weight: 700; }
@@ -5089,6 +5183,10 @@ select:focus-visible {
 .loan-detail-metrics span { color: var(--muted); font-size: 12px; font-weight: 550; }
 .loan-detail-metrics strong { color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums; }
 .loan-detail-metrics > div:last-child strong { color: var(--expense); }
+.loan-person-loans { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
+.loan-person-loans > .loan-detail-card { padding: 16px; box-shadow: none; }
+.loan-group-add { min-height: 44px; display: inline-flex; align-items: center; justify-self: start; gap: 8px; padding: 0 14px; }
+.loan-repayment-selection { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .loan-repayments, .loan-unlinked-history { gap: 0; padding-top: 4px; }
 .loan-repayments h3, .loan-unlinked-history h3 { margin-bottom: 7px; color: var(--text); font-size: 13px; }
 .loan-repayment-row { min-height: 44px; padding: 10px 2px; border-color: var(--border); }
@@ -5130,6 +5228,9 @@ select:focus-visible {
   .loan-history-heading h2 { font-size: 19px; }
   .loan-history-heading > p { max-width: 22ch; font-size: 11px; }
   .loan-detail-card { gap: 13px; padding: 15px; border-radius: 17px; }
+  .loan-person-loans > .loan-detail-card { padding: 12px; }
+  .loan-group-add { width: 100%; justify-content: center; }
+  .loan-repayment-selection { grid-template-columns: 1fr; gap: 10px; }
   .loan-detail-header { grid-template-columns: 38px minmax(0,1fr); gap: 8px 10px; }
   .loan-row-icon { width: 38px; height: 38px; }
   .loan-detail-title { grid-column: 2; }

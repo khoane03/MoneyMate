@@ -4,9 +4,12 @@ import {
   Banknote,
   Building2,
   CreditCard,
+  Pencil,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Smartphone,
+  Trash2,
   WalletCards,
   X
 } from 'lucide-react'
@@ -17,6 +20,11 @@ import { fetchAllPages } from '../../shared/lib/pagination'
 import { createUuid } from '../../shared/lib/uuid'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { AmountInWords } from '../../shared/ui/AmountInWords'
+import {
+  reconcileWalletBalance,
+  updateWallet,
+  deleteWallet,
+} from '../../shared/lib/walletReconciliation'
 
 type Wallet = {
   id: string
@@ -58,6 +66,115 @@ export function WalletsPage() {
   const [opening, setOpening] = useState('0')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [reconcilingWallet, setReconcilingWallet] = useState<Wallet | null>(null)
+  const [targetBalance, setTargetBalance] = useState('0')
+  const [reconcileDate, setReconcileDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [reconcileNote, setReconcileNote] = useState('Điều chỉnh số dư ví')
+  const [reconcileBusy, setReconcileBusy] = useState(false)
+  const [reconcileError, setReconcileError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [editingWallet, setEditingWallet] = useState<Wallet | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editKind, setEditKind] = useState<Wallet['kind']>('cash')
+  const [editStatus, setEditStatus] = useState<'active' | 'archived'>('active')
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  function openEdit(wallet: Wallet) {
+    setEditingWallet(wallet)
+    setEditName(wallet.display_name)
+    setEditKind(wallet.kind)
+    setEditStatus(wallet.status)
+    setEditError('')
+    setConfirmDelete(false)
+  }
+
+  async function handleUpdateWallet(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingWallet) return
+    const trimmed = editName.trim()
+    if (!trimmed) {
+      setEditError('Tên ví không được để trống.')
+      return
+    }
+    setEditBusy(true)
+    setEditError('')
+    try {
+      await updateWallet({
+        id: editingWallet.id,
+        displayName: trimmed,
+        kind: editKind,
+        status: editStatus,
+      })
+      setSuccessMessage(`Đã cập nhật thông tin ví "${trimmed}".`)
+      setEditingWallet(null)
+      await refresh()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Không thể cập nhật ví.')
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  async function handleDeleteWallet() {
+    if (!editingWallet) return
+    setEditBusy(true)
+    setEditError('')
+    try {
+      await deleteWallet(editingWallet.id)
+      setSuccessMessage(`Đã xóa ví "${editingWallet.display_name}".`)
+      setEditingWallet(null)
+      await refresh()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Không thể xóa ví.')
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  function openReconcile(wallet: Wallet) {
+    setReconcilingWallet(wallet)
+    setTargetBalance(wallet.current_balance_bigint)
+    setReconcileDate(new Date().toISOString().slice(0, 10))
+    setReconcileNote('Điều chỉnh số dư ví')
+    setReconcileError('')
+  }
+
+  async function handleReconcile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!reconcilingWallet) return
+    setReconcileError('')
+    const finalTarget = targetBalance.trim() === '' ? '0' : targetBalance
+    try {
+      parseVnd(finalTarget)
+    } catch {
+      setReconcileError('Số dư mục tiêu không hợp lệ.')
+      return
+    }
+    setReconcileBusy(true)
+    try {
+      const result = await reconcileWalletBalance(
+        reconcilingWallet.id,
+        finalTarget,
+        reconcileDate || new Date().toISOString().slice(0, 10),
+        reconcileNote
+      )
+      const diffVal = BigInt(result.difference)
+      const diffText = diffVal === 0n
+        ? 'không thay đổi'
+        : diffVal > 0n
+        ? `tăng +${formatVnd(diffVal.toString())}`
+        : `giảm -${formatVnd((-diffVal).toString())}`
+      setSuccessMessage(`Đã cập nhật số dư ví ${reconcilingWallet.display_name} thành ${formatVnd(finalTarget)} (${diffText}).`)
+      setReconcilingWallet(null)
+      await refresh()
+    } catch (err) {
+      setReconcileError(err instanceof Error ? err.message : 'Không thể điều chỉnh số dư ví.')
+    } finally {
+      setReconcileBusy(false)
+    }
+  }
 
   const refresh = useCallback(async () => {
     if (!supabase) {
@@ -170,6 +287,12 @@ export function WalletsPage() {
           <CommonButton type="button" onClick={() => void refresh()}>
             Thử tải lại
           </CommonButton>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="profile-success" style={{ marginBottom: '14px' }} role="status">
+          {successMessage}
         </div>
       )}
 
@@ -323,11 +446,286 @@ export function WalletsPage() {
                     )}
                   </small>
                 </div>
-                <b>{formatVnd(wallet.current_balance_bigint)}</b>
+                <div className="wallet-row-actions">
+                  <b>{formatVnd(wallet.current_balance_bigint)}</b>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <CommonButton
+                      type="button"
+                      className="secondary-button wallet-reset-btn"
+                      onClick={() => openEdit(wallet)}
+                      aria-label={`Sửa ví ${wallet.display_name}`}
+                      title="Sửa ví"
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                      <span>Sửa</span>
+                    </CommonButton>
+                    <CommonButton
+                      type="button"
+                      className="secondary-button wallet-reset-btn"
+                      onClick={() => openReconcile(wallet)}
+                      aria-label={`Đặt lại số dư ví ${wallet.display_name}`}
+                      title="Đặt lại số dư ví"
+                    >
+                      <RotateCcw size={13} aria-hidden="true" />
+                      <span>Reset</span>
+                    </CommonButton>
+                  </div>
+                </div>
               </li>
             )
           })}
         </ul>
+      )}
+
+      {/* Bottom Sheet Modal for Wallet Reconciliation / Reset */}
+      {reconcilingWallet && (
+        <div className="modal-backdrop" onClick={() => setReconcilingWallet(null)}>
+          <div
+            className="bottom-sheet-modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reconcile-sheet-title"
+          >
+            <div className="sheet-handle" aria-hidden="true" />
+            <div className="sheet-header">
+              <h2 id="reconcile-sheet-title">Đặt lại số dư: {reconcilingWallet.display_name}</h2>
+              <CommonButton
+                type="button"
+                className="sheet-close-btn"
+                onClick={() => setReconcilingWallet(null)}
+                aria-label="Đóng biểu mẫu"
+              >
+                <X size={20} />
+              </CommonButton>
+            </div>
+
+            <form className="sheet-form" onSubmit={event => void handleReconcile(event)}>
+              <div className="reconcile-diff-box">
+                <div>
+                  <span>Số dư hiện tại trên app:</span>
+                  <strong>{formatVnd(reconcilingWallet.current_balance_bigint)}</strong>
+                </div>
+                <div>
+                  <span>Số dư ban đầu khi tạo ví:</span>
+                  <span>{formatVnd(reconcilingWallet.opening_balance_bigint)}</span>
+                </div>
+                {(() => {
+                  const current = BigInt(reconcilingWallet.current_balance_bigint)
+                  const target = BigInt(targetBalance || '0')
+                  const diff = target - current
+                  return (
+                    <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed var(--border)' }}>
+                      <span>Bút toán điều chỉnh dự kiến:</span>
+                      <strong className={diff > 0n ? 'amount-in' : diff < 0n ? 'amount-out' : ''}>
+                        {diff > 0n ? `+${formatVnd(diff.toString())} (Thu nhập)` : diff < 0n ? `-${formatVnd((-diff).toString())} (Chi phí)` : 'Số dư không đổi'}
+                      </strong>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="target-balance">Số dư thực tế mới (₫)</label>
+                <CommonInput
+                  id="target-balance"
+                  className="big-amount-input"
+                  inputMode="numeric"
+                  placeholder="0 ₫"
+                  value={targetBalance}
+                  onChange={event => setTargetBalance(normalizeVndInput(event.target.value))}
+                  autoFocus
+                />
+                <small className="amount-preview-label">{formatVnd(targetBalance || '0')}</small>
+                <AmountInWords id="target-balance" value={targetBalance || '0'} />
+                <div className="reconcile-quick-buttons">
+                  <button
+                    type="button"
+                    className="reconcile-quick-btn"
+                    onClick={() => setTargetBalance('0')}
+                  >
+                    Đặt về 0 ₫
+                  </button>
+                  <button
+                    type="button"
+                    className="reconcile-quick-btn"
+                    onClick={() => setTargetBalance(reconcilingWallet.opening_balance_bigint)}
+                  >
+                    Về số dư ban đầu ({formatVnd(reconcilingWallet.opening_balance_bigint)})
+                  </button>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="reconcile-date">Ngày ghi nhận</label>
+                <CommonInput
+                  id="reconcile-date"
+                  type="date"
+                  value={reconcileDate}
+                  onChange={event => setReconcileDate(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="reconcile-note">Ghi chú điều chỉnh</label>
+                <CommonInput
+                  id="reconcile-note"
+                  value={reconcileNote}
+                  onChange={event => setReconcileNote(event.target.value)}
+                  placeholder="Ví dụ: Điều chỉnh số dư thực tế, Reset ví..."
+                  maxLength={120}
+                />
+                <p className="field-help" style={{ marginTop: '4px' }}>
+                  Hệ thống sẽ tạo một giao dịch điều chỉnh để số dư ví khớp chính xác với số tiền bạn đặt.
+                </p>
+              </div>
+
+              {reconcileError && <div className="form-error" role="alert">{reconcileError}</div>}
+
+              <div className="sheet-form-actions">
+                <CommonButton
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setReconcilingWallet(null)}
+                  disabled={reconcileBusy}
+                >
+                  Hủy
+                </CommonButton>
+                <CommonButton className="primary-button" disabled={reconcileBusy}>
+                  {reconcileBusy ? 'Đang điều chỉnh…' : 'Xác nhận đặt lại số dư'}
+                </CommonButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Sheet Modal for Editing Wallet */}
+      {editingWallet && (
+        <div className="modal-backdrop" onClick={() => { if (!editBusy) setEditingWallet(null) }}>
+          <div
+            className="bottom-sheet-modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-wallet-sheet-title"
+          >
+            <div className="sheet-handle" aria-hidden="true" />
+            <div className="sheet-header">
+              <h2 id="edit-wallet-sheet-title">Chỉnh sửa ví: {editingWallet.display_name}</h2>
+              <CommonButton
+                type="button"
+                className="sheet-close-btn"
+                onClick={() => { if (!editBusy) setEditingWallet(null) }}
+                aria-label="Đóng biểu mẫu"
+              >
+                <X size={20} />
+              </CommonButton>
+            </div>
+
+            {confirmDelete ? (
+              <div className="confirm-delete-box" style={{ padding: '16px 0', textAlign: 'center' }}>
+                <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--expense)' }}>
+                  Xác nhận xóa ví này?
+                </p>
+                <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+                  Hành động này chỉ thực hiện được nếu ví chưa có giao dịch nào. Nếu ví đã có giao dịch phát sinh, bạn nên chọn &quot;Lưu trữ ví&quot; để bảo toàn lịch sử kế toán.
+                </p>
+                {editError && <div className="form-error" role="alert" style={{ marginBottom: '12px' }}>{editError}</div>}
+                <div className="sheet-form-actions" style={{ justifyContent: 'center' }}>
+                  <CommonButton
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={editBusy}
+                  >
+                    Hủy
+                  </CommonButton>
+                  <CommonButton
+                    type="button"
+                    className="modal-danger-btn primary-button"
+                    onClick={() => void handleDeleteWallet()}
+                    disabled={editBusy}
+                  >
+                    {editBusy ? 'Đang xóa…' : 'Xóa ví'}
+                  </CommonButton>
+                </div>
+              </div>
+            ) : (
+              <form className="sheet-form" onSubmit={event => void handleUpdateWallet(event)}>
+                <div className="field-group">
+                  <label htmlFor="edit-wallet-name">Tên ví</label>
+                  <CommonInput
+                    id="edit-wallet-name"
+                    value={editName}
+                    onChange={event => setEditName(event.target.value)}
+                    placeholder="Ví dụ: Tiền mặt, Techcombank, MoMo..."
+                    maxLength={80}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <div className="form-grid-2">
+                  <div className="field-group">
+                    <label htmlFor="edit-wallet-kind">Loại ví</label>
+                    <CommonDropdown
+                      id="edit-wallet-kind"
+                      value={editKind}
+                      onChange={event => setEditKind(event.target.value as Wallet['kind'])}
+                    >
+                      <option value="cash">Tiền mặt</option>
+                      <option value="bank">Tài khoản ngân hàng</option>
+                      <option value="ewallet">Ví điện tử</option>
+                      <option value="credit">Thẻ tín dụng</option>
+                    </CommonDropdown>
+                  </div>
+
+                  <div className="field-group">
+                    <label htmlFor="edit-wallet-status">Trạng thái sử dụng</label>
+                    <CommonDropdown
+                      id="edit-wallet-status"
+                      value={editStatus}
+                      onChange={event => setEditStatus(event.target.value as 'active' | 'archived')}
+                    >
+                      <option value="active">Đang sử dụng</option>
+                      <option value="archived">Lưu trữ (Ẩn khỏi hoạt động)</option>
+                    </CommonDropdown>
+                  </div>
+                </div>
+
+                {editError && <div className="form-error" role="alert">{editError}</div>}
+
+                <div className="sheet-form-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <CommonButton
+                    type="button"
+                    className="secondary-button"
+                    style={{ color: 'var(--expense)' }}
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={editBusy}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>Xóa ví</span>
+                  </CommonButton>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <CommonButton
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setEditingWallet(null)}
+                      disabled={editBusy}
+                    >
+                      Hủy
+                    </CommonButton>
+                    <CommonButton className="primary-button" disabled={editBusy}>
+                      {editBusy ? 'Đang lưu…' : 'Lưu thay đổi'}
+                    </CommonButton>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
 
       <footer className="menu-footer-note" style={{ marginTop: '20px' }}>

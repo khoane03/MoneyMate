@@ -1,15 +1,16 @@
 import { TransactionLink } from '../../shared/ui/TransactionLink'
 import { Button as CommonButton, Dropdown } from '../../shared/ui/Controls'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownLeft, ArrowUpRight, HandCoins, Plus } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, HandCoins, LockKeyhole, Plus } from 'lucide-react'
 import { supabase } from '../../shared/lib/supabase'
 import { formatVnd } from '../../shared/lib/money'
 import { formatDate } from '../../shared/lib/dateFormat'
 import { fetchAllPages } from '../../shared/lib/pagination'
-import { calculateLoanPaid, calculateLoanRemaining, calculateOutstanding } from '../../shared/lib/loanBalances'
+import { calculateLoanPaid, calculateLoanRemaining, calculateOutstanding, groupLoansByLender } from '../../shared/lib/loanBalances'
 import { LoadingModal } from '../../shared/ui/LoadingModal'
 import { ImageViewer } from '../../shared/ui/ImageViewer'
 import { getPrivateImageUrl } from '../../shared/lib/privateMedia'
+import { useLoanSecurity } from './loanSecurityContext'
 
 type LoanRow = {
   id: string
@@ -36,6 +37,7 @@ type SharedPayment = {
 type Wallet = { id: string; display_name: string }
 
 export function LoansPage() {
+  const loanSecurity = useLoanSecurity()
   const [rows, setRows] = useState<LoanRow[]>([])
   const [sharedLoans, setSharedLoans] = useState<SharedLoan[]>([])
   const [sharedPayments, setSharedPayments] = useState<SharedPayment[]>([])
@@ -124,30 +126,69 @@ export function LoansPage() {
     const remaining = loan.affects_outstanding ? calculateLoanRemaining(loan.id, loan.amount_bigint, rows) : null
     return { loan, repayments: repayments.sort((a, b) => b.accounting_date.localeCompare(a.accounting_date)), paid, remaining }
   }), [rows])
+  const loanGroups = useMemo(() => groupLoansByLender(loans.map(item => ({
+    ...item,
+    id: item.loan.id,
+    loan_lender_name: item.loan.loan_lender_name
+  }))), [loans])
   const unlinkedRepayments = rows.filter(row => row.kind === 'loan_principal_payment' && !row.loan_origin_transaction_id)
   const hasUntrackedRows = rows.some(row => !row.affects_outstanding)
 
   return <div className="loans-page">
     <LoadingModal message="Đang tải sổ Vay & Trả nợ…" show={loading} />
     <header className="loans-header"><div className="loans-header-copy"><span className="eyebrow">SỔ THEO DÕI RIÊNG</span><h1>Vay & Trả nợ</h1><p className="subheading">Theo dõi khoản vay, lịch sử thanh toán và số dư còn lại.</p></div>
-      <div className="loans-header-actions"><TransactionLink className="secondary-button mobile-plus-action" to="/transactions?action=new&kind=borrowed_funds&historical=1" aria-label="Thêm khoản vay cũ" title="Thêm khoản vay cũ"><Plus size={18} aria-hidden="true"/><span className="mobile-plus-label">Thêm khoản vay cũ</span></TransactionLink><TransactionLink className="primary-button mobile-plus-action" to="/transactions?action=new&kind=borrowed_funds" aria-label="Ghi khoản vay" title="Ghi khoản vay"><Plus size={18} aria-hidden="true"/><span className="mobile-plus-label">Ghi khoản vay</span></TransactionLink></div>
+      <div className="loans-header-actions">
+        {loanSecurity?.status?.enabled && (
+          <CommonButton
+            type="button"
+            className="secondary-button mobile-plus-action loan-lock-action"
+            onClick={() => void loanSecurity.lock()}
+            aria-label="Khóa sổ vay"
+            title="Khóa sổ vay ngay"
+          >
+            <LockKeyhole size={18} aria-hidden="true" />
+            <span className="mobile-plus-label">Khóa sổ</span>
+          </CommonButton>
+        )}
+        <TransactionLink className="secondary-button mobile-plus-action" to="/transactions?action=new&kind=borrowed_funds&historical=1" aria-label="Thêm khoản vay cũ" title="Thêm khoản vay cũ"><Plus size={18} aria-hidden="true"/><span className="mobile-plus-label">Thêm khoản vay cũ</span></TransactionLink>
+        <TransactionLink className="primary-button mobile-plus-action" to="/transactions?action=new&kind=borrowed_funds" aria-label="Ghi khoản vay" title="Ghi khoản vay"><Plus size={18} aria-hidden="true"/><span className="mobile-plus-label">Ghi khoản vay</span></TransactionLink>
+      </div>
     </header>
     <section className="loan-balance-card" aria-label="Tổng dư nợ đang theo dõi">
       <div className="loan-balance-main"><span className="loan-balance-icon" aria-hidden="true"><HandCoins size={22}/></span><div><span className="loan-balance-label">Tổng dư nợ đang theo dõi</span><strong>{formatVnd(outstanding > 0n ? outstanding : 0n)}</strong></div></div>
       <div className="loan-balance-meta"><span>{loans.filter(item => item.remaining !== null && item.remaining > 0n).length} khoản còn dư nợ</span><small>Khoản vay cũ không làm tăng số dư ví.</small></div>
     </section>
     {hasUntrackedRows && <p className="loan-tracking-note" role="status">Một số khoản trong lịch sử được lưu mà không thay đổi tổng dư nợ.</p>}
-    <section className="loan-history"><div className="loan-history-heading"><div><span className="eyebrow">TỪNG KHOẢN</span><h2>Chi tiết khoản vay</h2></div></div>
+    <section className="loan-history"><div className="loan-history-heading"><div><span className="eyebrow">GỘP THEO NGƯỜI CHO VAY</span><h2>Các khoản vay</h2></div></div>
       {error && <p className="data-status error" role="alert">{error} <CommonButton type="button" onClick={() => void refresh()}>Thử lại</CommonButton></p>}
       {!loading && !error && loans.length === 0 && <div className="empty-state"><HandCoins size={26}/><h3>Chưa có khoản vay</h3><p>Thêm khoản vay mới hoặc nhập dư nợ cũ để bắt đầu theo dõi.</p><TransactionLink className="primary-button mobile-plus-action" to="/transactions?action=new&kind=borrowed_funds&historical=1" aria-label="Thêm khoản vay cũ" title="Thêm khoản vay cũ"><Plus size={18} aria-hidden="true"/><span className="mobile-plus-label">Thêm khoản vay cũ</span></TransactionLink></div>}
-      {loans.map(({ loan, repayments, paid, remaining }) => <article className="loan-detail-card" key={loan.id}>
+      {loanGroups.map(group => {
+        const totalBorrowed = group.loans.reduce((sum, item) => sum + BigInt(item.loan.amount_bigint), 0n)
+        const totalPaid = group.loans.reduce((sum, item) => sum + item.paid, 0n)
+        const totalRemaining = group.loans.reduce((sum, item) => sum + (item.remaining ?? 0n), 0n)
+        const trackedLoans = group.loans.filter(item => item.remaining !== null)
+        const lenderPrefill = group.loans.find(item => item.loan.loan_lender_name)?.loan.loan_lender_name?.trim() ?? ''
+        return <article className="loan-detail-card loan-person-group" key={group.key}>
+          <header className="loan-detail-header"><span className="loan-row-icon borrowed_funds" aria-hidden="true"><HandCoins size={18}/></span><div className="loan-detail-title"><strong>Tổng vay từ {group.lenderName}</strong><small>{group.loans.length} khoản vay chi tiết</small></div><b>{formatVnd(totalBorrowed.toString())}</b></header>
+          <div className="loan-detail-metrics"><div><span>Tổng đã vay</span><strong>{formatVnd(totalBorrowed.toString())}</strong></div><div><span>Đã trả theo dõi</span><strong>{formatVnd(totalPaid.toString())}</strong></div><div><span>Còn dư nợ theo dõi</span><strong>{trackedLoans.length ? formatVnd(totalRemaining.toString()) : 'Không theo dõi'}</strong></div></div>
+          <TransactionLink
+            className="secondary-button loan-group-add"
+            to="/transactions?action=new&kind=borrowed_funds"
+            state={{ loanLenderPrefill: lenderPrefill }}
+            aria-label={lenderPrefill ? `Thêm khoản vay từ ${lenderPrefill}` : 'Thêm khoản vay và nhập người cho vay'}
+          ><Plus size={17} aria-hidden="true"/>{lenderPrefill ? 'Thêm khoản vay từ người này' : 'Thêm khoản vay'}</TransactionLink>
+          <div className="loan-person-loans" aria-label={`Các khoản vay chi tiết từ ${group.lenderName}`}>
+          {group.loans.map(({ loan, repayments, paid, remaining }) => <article className="loan-detail-card" key={loan.id}>
         <header className="loan-detail-header"><span className="loan-row-icon borrowed_funds" aria-hidden="true"><ArrowDownLeft size={18}/></span><div className="loan-detail-title"><strong>{loan.loan_purpose || loan.note || 'Khoản vay'}</strong><small>Vay từ {loan.loan_lender_name || 'Chưa ghi rõ'} · {formatDate(loan.accounting_date)}</small></div><b>{formatVnd(loan.amount_bigint)}</b></header>
         {!loan.affects_wallet && <span className="loan-history-badge historical">Khoản vay cũ · Không cộng vào ví</span>}
         <div className="loan-detail-metrics"><div><span>Đã vay</span><strong>{formatVnd(loan.amount_bigint)}</strong></div><div><span>Đã trả</span><strong>{formatVnd(paid.toString())}</strong></div><div><span>Còn nợ</span><strong>{remaining === null ? 'Không theo dõi' : formatVnd(remaining.toString())}</strong></div></div>
         {loan.note && loan.loan_purpose && <p className="loan-extra-note">Ghi chú: {loan.note}</p>}
         {repayments.length > 0 && <div className="loan-repayments"><h3>Lịch sử trả nợ</h3>{repayments.map(repayment => <div className="loan-repayment-row" key={repayment.id}><span><ArrowUpRight size={15} aria-hidden="true"/> {formatDate(repayment.accounting_date)}</span><strong>{formatVnd(repayment.amount_bigint)}</strong>{!repayment.affects_outstanding && <small>Không trừ dư nợ</small>}</div>)}</div>}
         {remaining !== null && remaining > 0n && <TransactionLink className="loan-repay-link" to={`/transactions?action=new&kind=loan_principal_payment&loanId=${loan.id}`}><Plus size={17} aria-hidden="true"/>Trả nợ</TransactionLink>}
-      </article>)}
+          </article>)}
+          </div>
+        </article>
+      })}
       {sharedLoans.length > 0 && <div className="shared-loan-section">
         <div className="loan-history-heading"><div><span className="eyebrow">THEO DÕI CÙNG NGƯỜI KẾT NỐI</span><h2>Khoản vay chia sẻ</h2></div><p>Thông tin ví riêng chỉ bạn xem được.</p></div>
         {sharedLoans.map(loan => {

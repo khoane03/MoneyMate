@@ -32,5 +32,8 @@ verify_jwt = true
 [functions.media]
 verify_jwt = true
 
+[functions.loan-security]
+verify_jwt = true
+
 [analytics]
 enabled = false

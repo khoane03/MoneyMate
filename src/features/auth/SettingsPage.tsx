@@ -6,6 +6,7 @@ import { clearUserPartition } from '../../data/local/database'
 import { useTheme } from '../../shared/lib/themeContext'
 import { prepareAvatar, profileInitial, useAccountProfile } from './accountProfile'
 import { deletePrivateImage, getPrivateImageUrl, uploadPrivateImage } from '../../shared/lib/privateMedia'
+import { LoanSecuritySettings } from '../loans/LoanSecuritySettings'
 
 export function SettingsPage() {
   const [busy, setBusy] = useState(false)
@@ -108,6 +109,7 @@ export function SettingsPage() {
         <CommonButton className="primary-button profile-save-button" type="submit" disabled={busy || (!avatarFile && displayName.trim() === (profile?.displayName ?? ''))}><Save size={17}/>{busy ? 'Đang lưu…' : 'Lưu hồ sơ'}</CommonButton>
       </>}
     </form>
+    <LoanSecuritySettings />
     <div className="settings-panel theme-settings-panel"><div><h2>Giao diện</h2><p>Chọn chế độ sáng hoặc tối. Lựa chọn được lưu trên thiết bị này.</p></div><CommonButton className="secondary-button theme-toggle" type="button" onClick={toggleTheme} aria-label={`Chuyển sang giao diện ${theme === 'dark' ? 'sáng' : 'tối'}`}><span className="theme-toggle-icon">{theme === 'dark' ? <Sun size={18} aria-hidden="true"/> : <Moon size={18} aria-hidden="true"/>}</span>{theme === 'dark' ? 'Bật giao diện sáng' : 'Bật giao diện tối'}</CommonButton><p className="theme-current" role="status">Đang dùng giao diện {theme === 'dark' ? 'tối' : 'sáng'}</p></div>
     <div className="settings-panel"><h2>Phiên đăng nhập</h2><p>Đăng xuất sẽ xóa dữ liệu đang lưu cục bộ của tài khoản này trên thiết bị.</p>{error && <p className="form-error" role="alert">{error}</p>}<CommonButton className="secondary-button" onClick={()=>void signOut()} disabled={busy || !supabase}><LogOut size={18}/>{busy?'Đang đăng xuất…':'Đăng xuất'}</CommonButton></div>
   </section>

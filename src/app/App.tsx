@@ -26,6 +26,7 @@ const AdminPage = lazy(() => import('../features/admin/AdminPage').then(module =
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then(module => ({ default: module.ReportsPage })))
 const WalletsPage = lazy(() => import('../features/wallets/WalletsPage').then(module => ({ default: module.WalletsPage })))
 const LoansPage = lazy(() => import('../features/loans/LoansPage').then(module => ({ default: module.LoansPage })))
+const LoanSecurityGate = lazy(() => import('../features/loans/LoanSecurityGate').then(module => ({ default: module.LoanSecurityGate })))
 const BudgetsPage = lazy(() => import('../features/budgets/BudgetsPage').then(module => ({ default: module.BudgetsPage })))
 const PlannedExpensesPage = lazy(() => import('../features/planned/PlannedExpensesPage').then(module => ({ default: module.PlannedExpensesPage })))
 const CategoriesPage = lazy(() => import('../features/categories/CategoriesPage').then(module => ({ default: module.CategoriesPage })))
@@ -156,7 +157,7 @@ export default function App() {
             <Route path="/admin" element={adminAccess === 'allowed' ? <AdminPage /> : adminAccess === 'checking' ? <p className="data-status" role="status">Đang kiểm tra quyền truy cập…</p> : <Navigate to="/" replace />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/wallets" element={<WalletsPage />} />
-            <Route path="/loans" element={<LoansPage />} />
+            <Route path="/loans" element={<LoanSecurityGate><LoansPage /></LoanSecurityGate>} />
             <Route path="/budgets" element={<BudgetsPage />} />
             <Route path="/planned-expenses" element={<PlannedExpensesPage />} />
             <Route path="/categories" element={<CategoriesPage />} />

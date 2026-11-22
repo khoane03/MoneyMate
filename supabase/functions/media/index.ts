@@ -197,8 +197,31 @@ Deno.serve(async request => {
     if (asset.state !== 'ready') return response(request, { error: 'media_not_ready' }, 409)
     const allowed = asset.uploaded_by === actorId || await canReadShared(admin, actorId, publicId)
     if (!allowed) return response(request, { error: 'media_access_denied' }, 403)
+    let loanEvidence = asset.purpose === 'loan-evidence'
+    if (asset.purpose === 'loan-evidence') {
+      const { data: evidence, error: evidenceError } = await admin.from('shared_loan_payment_evidence')
+        .select('shared_payment_id').eq('storage_path', publicId).maybeSingle()
+      if (evidenceError) return response(request, { error: 'loan_evidence_check_failed' }, 503)
+      if (!evidence) return response(request, { error: 'media_not_referenced' }, 404)
+    } else if (asset.purpose === 'transaction-evidence') {
+      const { data: evidence, error: evidenceError } = await admin.from('transaction_evidence')
+        .select('transaction_id').eq('storage_path', publicId).maybeSingle()
+      if (evidenceError) return response(request, { error: 'evidence_check_failed' }, 503)
+      if (!evidence) return response(request, { error: 'media_not_referenced' }, 404)
+      const { data: transaction, error: transactionError } = await admin.from('transactions')
+        .select('kind').eq('id', evidence.transaction_id).maybeSingle()
+      if (transactionError) return response(request, { error: 'evidence_check_failed' }, 503)
+      loanEvidence = ['borrowed_funds', 'loan_principal_payment'].includes(transaction?.kind ?? '')
+    }
+    if (loanEvidence) {
+      const { data: hasLoanAccess, error: loanAccessError } = await userClient.rpc('loan_security_access_granted')
+      if (loanAccessError) return response(request, { error: 'loan_access_check_failed' }, 503)
+      if (hasLoanAccess !== true) {
+        return response(request, { error: 'loan_step_up_required' }, 403)
+      }
+    }
     const requestedExpiry = typeof body.expires_in === 'number' && Number.isInteger(body.expires_in) ? body.expires_in : 1800
-    const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(requestedExpiry, 60), 3600)
+    const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(requestedExpiry, 60), loanEvidence ? 60 : 3600)
     const timestamp = Math.floor(Date.now() / 1000)
     const parameters = { expires_at: expiresAt, format: asset.format, public_id: publicId, timestamp, type: 'authenticated' }
     const query = new URLSearchParams({ ...Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, String(value)])), api_key: cloudinaryKey, signature: await apiSignature(parameters) })
