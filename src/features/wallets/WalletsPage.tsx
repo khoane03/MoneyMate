@@ -171,7 +171,8 @@ export function WalletsPage() {
         reconcilingWallet.id,
         finalTarget,
         reconcileDate || new Date().toISOString().slice(0, 10),
-        reconcileNote
+        reconcileNote,
+        reconcilingWallet.current_balance_bigint
       )
       const diffVal = BigInt(result.difference)
       const diffText = diffVal === 0n
@@ -240,7 +241,7 @@ export function WalletsPage() {
             delta = amt
           } else if (tx.kind === 'borrowed_funds' && tx.affects_wallet) {
             delta = amt
-          } else if (['expense', 'loan_disbursement', 'transfer_out'].includes(tx.kind)) {
+          } else if (['expense', 'loan_disbursement', 'transfer_out', 'settlement_payment'].includes(tx.kind)) {
             delta = -amt
           } else if (tx.kind === 'loan_principal_payment' && tx.affects_wallet) {
             delta = -amt

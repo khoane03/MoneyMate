@@ -183,6 +183,38 @@ describe('walletReconciliation', () => {
       }))
       expect(mockDispatchEvent).toHaveBeenCalled()
     })
+
+    it('rejects bogus 0 diff from RPC when knownCurrentBalance is negative and resets to 0', async () => {
+      // RPC returns bogus 0 difference because of server-side null view
+      mockRpc
+        .mockResolvedValueOnce({
+          data: { success: true, difference: '0', current_balance: '0' },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: { id: 'created-income-tx' },
+          error: null,
+        })
+
+      const result = await reconcileWalletBalance(
+        'wallet-mb',
+        '0',
+        '2026-11-22',
+        'Điều chỉnh số dư ví',
+        '-1591248'
+      )
+
+      expect(result.success).toBe(true)
+      expect(result.difference).toBe('1591248')
+      expect(result.current_balance).toBe('0')
+      expect(result.transaction_id).toBe('created-income-tx')
+      expect(mockRpc).toHaveBeenCalledWith('create_personal_transaction', expect.objectContaining({
+        p_wallet_id: 'wallet-mb',
+        p_kind: 'income',
+        p_amount_bigint: '1591248',
+      }))
+      expect(mockDispatchEvent).toHaveBeenCalled()
+    })
   })
 
   describe('updatePersonalTransaction', () => {

@@ -37,66 +37,97 @@ export async function reconcileWalletBalance(
   walletId: string,
   targetBalance: string,
   accountingDate: string,
-  note = 'Điều chỉnh số dư ví'
+  note = 'Điều chỉnh số dư ví',
+  knownCurrentBalance?: string
 ): Promise<ReconcileResult> {
   if (!supabase) throw new Error('Chưa kết nối dịch vụ.')
 
-  // Try RPC first
-  const { data, error } = await supabase.rpc('reconcile_wallet_balance', {
-    p_wallet_id: walletId,
-    p_target_balance: targetBalance,
-    p_accounting_date: accountingDate,
-    p_note: note,
-    p_idempotency_key: createUuid(),
-  })
+  const target = parseBigIntSafe(targetBalance)
 
-  if (!error && data) {
+  // If client knows the current balance, compute expected difference
+  let expectedDiff: bigint | null = null
+  if (knownCurrentBalance !== undefined && knownCurrentBalance !== null && knownCurrentBalance !== '') {
+    expectedDiff = target - parseBigIntSafe(knownCurrentBalance)
+  }
+
+  // If expected difference is explicitly 0, we're already at target
+  if (expectedDiff === 0n) {
+    return { success: true, difference: '0', current_balance: targetBalance }
+  }
+
+  // Try RPC first
+  let rpcData: ReconcileResult | null = null
+  try {
+    const { data, error } = await supabase.rpc('reconcile_wallet_balance', {
+      p_wallet_id: walletId,
+      p_target_balance: targetBalance,
+      p_accounting_date: accountingDate,
+      p_note: note,
+      p_idempotency_key: createUuid(),
+    })
+    if (!error && data) {
+      const res = data as ReconcileResult
+      // Guard: if expectedDiff is known non-zero, but RPC returns '0', the RPC on server gave a stale/bogus 0 diff!
+      // In that case, reject the RPC result and proceed to reliable fallback calculation.
+      if (expectedDiff !== null && expectedDiff !== 0n && parseBigIntSafe(res.difference) === 0n) {
+        rpcData = null
+      } else {
+        rpcData = res
+      }
+    }
+  } catch {
+    rpcData = null
+  }
+
+  if (rpcData) {
     notifyFinancialChange()
-    return data as ReconcileResult
+    return rpcData
   }
 
   // Fallback: Compute difference client-side
-  const { data: balanceData, error: balanceError } = await supabase
-    .from('wallet_balances')
-    .select('current_balance_bigint')
-    .eq('id', walletId)
-    .single()
-
-  let currentBalanceStr = balanceData?.current_balance_bigint
-  if (balanceError || currentBalanceStr === undefined || currentBalanceStr === null) {
-    const { data: walletData } = await supabase
-      .from('wallets')
-      .select('opening_balance_bigint')
+  let currentBalanceStr = knownCurrentBalance
+  if (currentBalanceStr === undefined || currentBalanceStr === null || currentBalanceStr === '') {
+    const { data: balanceData, error: balanceError } = await supabase
+      .from('wallet_balances')
+      .select('current_balance_bigint')
       .eq('id', walletId)
       .single()
-    const opening = parseBigIntSafe(walletData?.opening_balance_bigint ?? '0')
 
-    // Query transactions directly to get true current balance
-    const { data: txData } = await supabase
-      .from('transactions')
-      .select('kind,amount_bigint,affects_wallet')
-      .eq('wallet_id', walletId)
+    currentBalanceStr = balanceData?.current_balance_bigint
+    if (balanceError || currentBalanceStr === undefined || currentBalanceStr === null) {
+      const { data: walletData } = await supabase
+        .from('wallets')
+        .select('opening_balance_bigint')
+        .eq('id', walletId)
+        .single()
+      const opening = parseBigIntSafe(walletData?.opening_balance_bigint ?? '0')
 
-    let movement = 0n
-    if (txData) {
-      for (const tx of txData) {
-        const amt = parseBigIntSafe(tx.amount_bigint)
-        if (['income', 'loan_repayment', 'transfer_in', 'loan_repayment_received'].includes(tx.kind)) {
-          movement += amt
-        } else if (tx.kind === 'borrowed_funds' && tx.affects_wallet) {
-          movement += amt
-        } else if (['expense', 'loan_disbursement', 'transfer_out'].includes(tx.kind)) {
-          movement -= amt
-        } else if (tx.kind === 'loan_principal_payment' && tx.affects_wallet) {
-          movement -= amt
+      // Query transactions directly to get true current balance
+      const { data: txData } = await supabase
+        .from('transactions')
+        .select('kind,amount_bigint,affects_wallet')
+        .eq('wallet_id', walletId)
+
+      let movement = 0n
+      if (txData) {
+        for (const tx of txData) {
+          const amt = parseBigIntSafe(tx.amount_bigint)
+          if (['income', 'loan_repayment', 'transfer_in', 'loan_repayment_received'].includes(tx.kind)) {
+            movement += amt
+          } else if (tx.kind === 'borrowed_funds' && tx.affects_wallet) {
+            movement += amt
+          } else if (['expense', 'loan_disbursement', 'transfer_out', 'settlement_payment'].includes(tx.kind)) {
+            movement -= amt
+          } else if (tx.kind === 'loan_principal_payment' && tx.affects_wallet) {
+            movement -= amt
+          }
         }
       }
+      currentBalanceStr = (opening + movement).toString()
     }
-    currentBalanceStr = (opening + movement).toString()
   }
 
   const currentBalance = parseBigIntSafe(currentBalanceStr)
-  const target = parseBigIntSafe(targetBalance)
   const diff = target - currentBalance
 
   if (diff === 0n) {
@@ -128,16 +159,16 @@ export async function reconcileWalletBalance(
     p_share_with_counterparty: false,
   })
 
-  const rpcData = rpcResult?.data
-  const rpcError = rpcResult?.error
+  const fallbackRpcData = rpcResult?.data
+  const fallbackRpcError = rpcResult?.error
 
-  if (!rpcError && rpcData) {
+  if (!fallbackRpcError && fallbackRpcData) {
     notifyFinancialChange()
     return {
       success: true,
       difference: diff.toString(),
       current_balance: targetBalance,
-      transaction_id: (rpcData as { id?: string })?.id,
+      transaction_id: (fallbackRpcData as { id?: string })?.id,
     }
   }
 
@@ -160,7 +191,7 @@ export async function reconcileWalletBalance(
     .single()
 
   if (insertError) {
-    const errorMsg = rpcError?.message || insertError?.message || 'Không thể tạo bút toán điều chỉnh.'
+    const errorMsg = fallbackRpcError?.message || insertError?.message || 'Không thể tạo bút toán điều chỉnh.'
     throw new Error(errorMsg)
   }
 
