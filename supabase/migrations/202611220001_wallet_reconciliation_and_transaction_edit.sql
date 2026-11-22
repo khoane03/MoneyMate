@@ -1,4 +1,8 @@
 -- Wallet reconciliation and transaction editing capabilities
+
+-- Ensure authenticated users can select from wallet_balances view
+grant select on public.wallet_balances to authenticated;
+
 create or replace function public.reconcile_wallet_balance(
   p_wallet_id uuid,
   p_target_balance bigint,
@@ -26,7 +30,23 @@ begin
   select * into v_wallet from public.wallets where id = p_wallet_id and owner_id = v_actor and status = 'active';
   if not found then raise exception 'wallet unavailable' using errcode = '42501'; end if;
 
-  select current_balance_bigint into v_current_balance from public.wallet_balances where id = p_wallet_id;
+  -- Compute current balance directly from wallets and transactions for 100% reliable calculation
+  select coalesce(
+    w.opening_balance_bigint::numeric + coalesce(sum(case
+      when t.kind in ('income','loan_repayment','transfer_in','loan_repayment_received') then t.amount_bigint::numeric
+      when t.kind='borrowed_funds' and t.affects_wallet then t.amount_bigint::numeric
+      when t.kind in ('expense','loan_disbursement','transfer_out') then -t.amount_bigint::numeric
+      when t.kind='loan_principal_payment' and t.affects_wallet then -t.amount_bigint::numeric
+      else 0::numeric end), 0::numeric),
+    w.opening_balance_bigint::numeric,
+    0::numeric
+  )
+  into v_current_balance
+  from public.wallets w
+  left join public.transactions t on t.wallet_id = w.id and t.owner_id = w.owner_id
+  where w.id = p_wallet_id and w.owner_id = v_actor
+  group by w.id, w.opening_balance_bigint;
+
   if v_current_balance is null then v_current_balance := v_wallet.opening_balance_bigint::numeric; end if;
 
   v_diff := p_target_balance::numeric - v_current_balance;
@@ -169,3 +189,75 @@ end;
 $$;
 revoke all on function public.delete_personal_transaction(uuid) from public, anon;
 grant execute on function public.delete_personal_transaction(uuid) to authenticated;
+
+-- Wallet update RPC allowing owner to safely update metadata and initial opening balance
+create or replace function public.update_wallet(
+  p_id uuid,
+  p_display_name text,
+  p_kind text,
+  p_opening_balance bigint default null,
+  p_status text default 'active'
+)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := (select auth.uid());
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_id is null or p_display_name is null or p_kind is null then
+    raise exception 'invalid parameters' using errcode = '22023';
+  end if;
+  if p_kind not in ('cash', 'bank', 'ewallet', 'credit') then
+    raise exception 'invalid wallet kind' using errcode = '22023';
+  end if;
+  if p_status not in ('active', 'archived') then
+    raise exception 'invalid status' using errcode = '22023';
+  end if;
+
+  update public.wallets
+    set display_name = btrim(p_display_name),
+        kind = p_kind,
+        status = p_status,
+        opening_balance_bigint = coalesce(p_opening_balance, opening_balance_bigint),
+        updated_at = pg_catalog.now()
+    where id = p_id and owner_id = v_actor;
+
+  if not found then raise exception 'wallet unavailable' using errcode = '42501'; end if;
+
+  return jsonb_build_object('success', true, 'id', p_id);
+end;
+$$;
+revoke all on function public.update_wallet(uuid,text,text,bigint,text) from public, anon;
+grant execute on function public.update_wallet(uuid,text,text,bigint,text) to authenticated;
+
+-- Wallet delete / archive RPC
+create or replace function public.delete_wallet(p_id uuid)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := (select auth.uid());
+  v_tx_count integer;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_id is null then raise exception 'invalid parameters' using errcode = '22023'; end if;
+
+  select count(*) into v_tx_count from public.transactions where wallet_id = p_id and owner_id = v_actor;
+  if v_tx_count > 0 then
+    update public.wallets set status = 'archived', updated_at = pg_catalog.now()
+      where id = p_id and owner_id = v_actor;
+    return jsonb_build_object('success', true, 'archived', true);
+  end if;
+
+  delete from public.wallets where id = p_id and owner_id = v_actor;
+  if not found then raise exception 'wallet unavailable' using errcode = '42501'; end if;
+
+  return jsonb_build_object('success', true, 'deleted', true);
+end;
+$$;
+revoke all on function public.delete_wallet(uuid) from public, anon;
+grant execute on function public.delete_wallet(uuid) to authenticated;
+

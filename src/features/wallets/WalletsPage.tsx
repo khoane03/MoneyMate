@@ -179,6 +179,7 @@ export function WalletsPage() {
         : diffVal > 0n
         ? `tăng +${formatVnd(diffVal.toString())}`
         : `giảm -${formatVnd((-diffVal).toString())}`
+      setWallets(prev => prev.map(w => w.id === reconcilingWallet.id ? { ...w, current_balance_bigint: finalTarget } : w))
       setSuccessMessage(`Đã cập nhật số dư ví ${reconcilingWallet.display_name} thành ${formatVnd(finalTarget)} (${diffText}).`)
       setReconcilingWallet(null)
       await refresh()
@@ -208,15 +209,58 @@ export function WalletsPage() {
         .order('id', { ascending: false })
         .range(from, to), 50),
     ])
-    if (walletResult.error || balanceResult.error) {
+
+    if (walletResult.error) {
       setError('Không tải được danh sách ví. Kiểm tra kết nối rồi thử lại.')
-    } else {
-      const balances = new Map((balanceResult.data ?? []).map(row => [row.id, row.current_balance_bigint]))
-      setWallets(((walletResult.data ?? []) as Omit<Wallet, 'current_balance_bigint'>[]).map(wallet => ({
-        ...wallet,
-        current_balance_bigint: String(balances.get(wallet.id) ?? wallet.opening_balance_bigint),
-      })))
+      setLoading(false)
+      return
     }
+
+    const walletRows = (walletResult.data ?? []) as Omit<Wallet, 'current_balance_bigint'>[]
+    const balances = new Map<string, string | number>()
+
+    if (!balanceResult.error && balanceResult.data && balanceResult.data.length > 0) {
+      for (const row of balanceResult.data) {
+        balances.set(row.id, row.current_balance_bigint)
+      }
+    } else {
+      // Resilient fallback: compute wallet balances directly from transactions
+      const txResult = await fetchAllPages((from, to) => client.from('transactions')
+        .select('wallet_id,kind,amount_bigint,affects_wallet')
+        .range(from, to), 200)
+
+      if (!txResult.error && txResult.data) {
+        const txSums = new Map<string, bigint>()
+        for (const tx of txResult.data) {
+          if (!tx.wallet_id) continue
+          const currentSum = txSums.get(tx.wallet_id) ?? 0n
+          const amt = BigInt(tx.amount_bigint || 0)
+          let delta = 0n
+          if (['income', 'loan_repayment', 'transfer_in', 'loan_repayment_received'].includes(tx.kind)) {
+            delta = amt
+          } else if (tx.kind === 'borrowed_funds' && tx.affects_wallet) {
+            delta = amt
+          } else if (['expense', 'loan_disbursement', 'transfer_out'].includes(tx.kind)) {
+            delta = -amt
+          } else if (tx.kind === 'loan_principal_payment' && tx.affects_wallet) {
+            delta = -amt
+          }
+          txSums.set(tx.wallet_id, currentSum + delta)
+        }
+
+        for (const w of walletRows) {
+          const opening = BigInt(w.opening_balance_bigint || 0)
+          const movement = txSums.get(w.id) ?? 0n
+          balances.set(w.id, (opening + movement).toString())
+        }
+      }
+    }
+
+    setWallets(walletRows.map(wallet => ({
+      ...wallet,
+      current_balance_bigint: String(balances.get(wallet.id) ?? wallet.opening_balance_bigint),
+    })))
+    setError('')
     setLoading(false)
   }, [])
 

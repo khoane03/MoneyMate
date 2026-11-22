@@ -69,7 +69,30 @@ export async function reconcileWalletBalance(
       .select('opening_balance_bigint')
       .eq('id', walletId)
       .single()
-    currentBalanceStr = walletData?.opening_balance_bigint ?? '0'
+    const opening = parseBigIntSafe(walletData?.opening_balance_bigint ?? '0')
+
+    // Query transactions directly to get true current balance
+    const { data: txData } = await supabase
+      .from('transactions')
+      .select('kind,amount_bigint,affects_wallet')
+      .eq('wallet_id', walletId)
+
+    let movement = 0n
+    if (txData) {
+      for (const tx of txData) {
+        const amt = parseBigIntSafe(tx.amount_bigint)
+        if (['income', 'loan_repayment', 'transfer_in', 'loan_repayment_received'].includes(tx.kind)) {
+          movement += amt
+        } else if (tx.kind === 'borrowed_funds' && tx.affects_wallet) {
+          movement += amt
+        } else if (['expense', 'loan_disbursement', 'transfer_out'].includes(tx.kind)) {
+          movement -= amt
+        } else if (tx.kind === 'loan_principal_payment' && tx.affects_wallet) {
+          movement -= amt
+        }
+      }
+    }
+    currentBalanceStr = (opening + movement).toString()
   }
 
   const currentBalance = parseBigIntSafe(currentBalanceStr)
@@ -237,6 +260,22 @@ export type UpdateWalletInput = {
 
 export async function updateWallet(input: UpdateWalletInput): Promise<void> {
   if (!supabase) throw new Error('Chưa kết nối dịch vụ.')
+
+  // Try update_wallet RPC first
+  const rpcRes = await supabase.rpc('update_wallet', {
+    p_id: input.id,
+    p_display_name: input.displayName.trim(),
+    p_kind: input.kind,
+    p_opening_balance: input.openingBalance ? input.openingBalance : null,
+    p_status: input.status ?? 'active',
+  })
+
+  if (rpcRes && !rpcRes.error) {
+    notifyFinancialChange()
+    return
+  }
+
+  // Fallback: direct update
   const updatePayload: Record<string, unknown> = {
     display_name: input.displayName.trim(),
     kind: input.kind,
@@ -257,6 +296,17 @@ export async function updateWallet(input: UpdateWalletInput): Promise<void> {
 
 export async function deleteWallet(walletId: string): Promise<void> {
   if (!supabase) throw new Error('Chưa kết nối dịch vụ.')
+
+  // Try RPC first
+  const rpcRes = await supabase.rpc('delete_wallet', {
+    p_id: walletId,
+  })
+
+  if (rpcRes && !rpcRes.error && rpcRes.data) {
+    notifyFinancialChange()
+    return
+  }
+
   const { error } = await supabase
     .from('wallets')
     .delete()

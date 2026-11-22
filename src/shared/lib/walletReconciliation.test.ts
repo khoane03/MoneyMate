@@ -254,7 +254,29 @@ describe('walletReconciliation', () => {
   })
 
   describe('updateWallet', () => {
-    it('updates wallet fields and dispatches financial change event', async () => {
+    it('uses RPC when available and dispatches financial change event', async () => {
+      mockRpc.mockResolvedValueOnce({ error: null, data: { success: true } })
+
+      await updateWallet({
+        id: 'w-1',
+        displayName: 'Ví chính',
+        kind: 'bank',
+        openingBalance: '100000',
+        status: 'active',
+      })
+
+      expect(mockRpc).toHaveBeenCalledWith('update_wallet', {
+        p_id: 'w-1',
+        p_display_name: 'Ví chính',
+        p_kind: 'bank',
+        p_opening_balance: '100000',
+        p_status: 'active',
+      })
+      expect(mockDispatchEvent).toHaveBeenCalled()
+    })
+
+    it('falls back to direct table update when RPC is unavailable', async () => {
+      mockRpc.mockResolvedValueOnce({ error: { message: 'function does not exist' }, data: null })
       const updateEq = vi.fn().mockResolvedValue({ error: null })
       const updateMock = vi.fn().mockReturnValue({ eq: updateEq })
       mockFrom.mockReturnValue({ update: updateMock })
@@ -278,7 +300,17 @@ describe('walletReconciliation', () => {
   })
 
   describe('deleteWallet', () => {
-    it('deletes wallet when no constraint violation', async () => {
+    it('uses RPC when available and dispatches financial change event', async () => {
+      mockRpc.mockResolvedValueOnce({ error: null, data: { success: true } })
+
+      await deleteWallet('w-1')
+
+      expect(mockRpc).toHaveBeenCalledWith('delete_wallet', { p_id: 'w-1' })
+      expect(mockDispatchEvent).toHaveBeenCalled()
+    })
+
+    it('falls back to direct delete when RPC is unavailable', async () => {
+      mockRpc.mockResolvedValueOnce({ error: { message: 'function does not exist' }, data: null })
       const deleteEq = vi.fn().mockResolvedValue({ error: null })
       const deleteMock = vi.fn().mockReturnValue({ eq: deleteEq })
       mockFrom.mockReturnValue({ delete: deleteMock })
@@ -291,6 +323,7 @@ describe('walletReconciliation', () => {
     })
 
     it('throws friendly error when wallet has foreign key transactions', async () => {
+      mockRpc.mockResolvedValueOnce({ error: { message: 'function does not exist' }, data: null })
       const deleteEq = vi.fn().mockResolvedValue({
         error: { code: '23503', message: 'foreign key constraint "transactions_wallet_id_fkey" violated' }
       })
